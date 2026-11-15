@@ -27,7 +27,7 @@ const STORY_CHAPTERS = [
 Em meio à rotina de uma pequena loja no centro de Suzano e aos caminhos que o Andrey percorria todos os dias, nossos olhares começaram a se encontrar. Entre cumprimentos, sorrisos discretos e uma amizade sincera, algo bonito começava a nascer.
 
 Naquele momento, não sabíamos o que o futuro nos reservava, muito menos que aqueles pequenos encontros fariam parte de uma história tão grande.`,
-		image: 'image.png',
+		image: '001.jpeg',
 		imageAlt: 'Andrey e Amanda em 2011 — os primeiros olhares em Suzano',
 		imagePosition: 'right' as const,
 	},
@@ -39,7 +39,7 @@ Naquele momento, não sabíamos o que o futuro nos reservava, muito menos que aq
 O tempo passou, seguimos direções diferentes, vivemos nossas próprias histórias, enfrentamos desafios, conhecemos alegrias e também atravessamos momentos difíceis. Foram anos de aprendizados, mudanças e amadurecimento.
 
 Cada um carregou suas experiências, algumas cicatrizes e muitos sonhos.`,
-		image: '003.jpeg',
+		image: '002.jpeg',
 		imageAlt: 'Andrey e Amanda — caminhos da vida e amadurecimento',
 		imagePosition: 'left' as const,
 	},
@@ -53,7 +53,7 @@ E pensar que tudo começou com a intenção de dar apenas um simples "oi"...
 O que parecia ser somente um reencontro se transformou em conversas, novos sorrisos, um pedido de namoro e, sem que percebêssemos, no início de uma das partes mais bonitas das nossas vidas.
 
 Dessa vez, já não éramos as mesmas pessoas de 2011. Mas encontramos um no outro algo que talvez nem soubéssemos que precisávamos: acolhimento, companheirismo, compreensão e um amor que nos ajudou a crescer e a cuidar das feridas do passado.`,
-		image: 'WhatsApp Image 2026-11-14 at 20.14.43.jpeg',
+		image: '003.jpeg',
 		imageAlt: 'Andrey e Amanda em 2021 — o reencontro que mudou tudo',
 		imagePosition: 'right' as const,
 	},
@@ -308,11 +308,11 @@ export default function NossaHistoriaPage() {
  </h2>
  <div className="grid grid-cols-2 gap-space-md md:grid-cols-3">
  {[
- { src: '001.jpeg', alt: 'Andrey e Amanda — momento especial 1' },
+ { src: 'WhatsApp Image 2026-11-14 at 20.14.43.jpeg', alt: 'Andrey e Amanda — momento especial 1' },
  { src: '0001.png', alt: 'Andrey e Amanda — momento especial 2' },
  { src: '002.jpeg', alt: 'Andrey e Amanda — momento especial 3' },
  { src: '008.jpeg', alt: 'Andrey e Amanda — momento especial 4' },
- { src: 'Casal Feliz no Jardim Dourado.png', alt: 'Andrey e Amanda no jardim dourado' },
+ { src: 'bannerHero.png', alt: 'Andrey e Amanda — banner do casal' },
  { src: 'Abraço Romântico ao Pôr do Sol (1).png', alt: 'Abraço romântico ao pôr do sol' },
  ].map((photo, i) => (
  <div
