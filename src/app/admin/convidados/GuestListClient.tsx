@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import type { GuestWithInvitation } from '@/lib/repositories/guest.repository';
 import { GuestActionsMenu } from '@/components/admin/GuestActionsMenu';
-import { deactivateGuest } from '@/lib/repositories/guest.repository';
 
 /**
  * Componente client-side para renderizar a lista de convidados
  * com o menu dropdown de ações funcional em cada card.
+ *
+ * NOTA: deactivateGuest é uma função server-only do repository.
+ * A desativação deve ser feita via Server Action dedicada (não implementada ainda).
+ * Este componente NÃO importa funções server-only diretamente.
  */
 export function GuestListClient({ guests }: { guests: GuestWithInvitation[] }) {
 	const [refreshKey, setRefreshKey] = useState(0);
@@ -17,16 +20,10 @@ export function GuestListClient({ guests }: { guests: GuestWithInvitation[] }) {
 		console.log('[GuestListClient] Editar convidado:', guest.id);
 	};
 
-	const handleDeactivate = async (guest: GuestWithInvitation) => {
-		try {
-			const eventId = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
-			// Nota: deactivateGuest é server-only, precisa de Server Action wrapper
-			// Por enquanto, apenas log e feedback visual
-			console.log('[GuestListClient] Desativar convidado:', guest.id);
-			setRefreshKey(prev => prev + 1);
-		} catch (e) {
-			console.error('[GuestListClient] Falha ao desativar:', e);
-		}
+	const handleDeactivate = async (_guest: GuestWithInvitation) => {
+		// TODO: Implementar Server Action de desativação
+		// deactivateGuest é server-only e não pode ser chamada diretamente do cliente
+		console.warn('[GuestListClient] Desativação ainda não implementada. Requer Server Action.');
 	};
 
 	return (
