@@ -145,6 +145,9 @@
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Verde floresta como fallback para eliminar faixa branca no overscroll/bounce.
+       O Hero cobre 100dvh com bg-[#17291F]; as demais seções usam bg-surface no body. */
+    background-color: #17291F;
   }
 
   /* Compensar altura do header sticky desktop nas âncoras */

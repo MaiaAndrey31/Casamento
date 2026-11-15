@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
 import { WEDDING_CONFIG, getAssetPath } from '@/config/wedding';
 
 /**
@@ -95,22 +96,30 @@ export function OurStory() {
 						<div className="mt-[-4rem] h-16 bg-gradient-to-t from-surface to-transparent" />
 					)}
 
-					{/* Botão de expandir/recolher */}
-					<button
-						onClick={() => setIsExpanded(!isExpanded)}
-						className="mx-auto mt-space-md flex items-center gap-2 rounded-md border border-outline-variant/30 bg-surface-container-low px-6 py-3 text-label-md uppercase tracking-widest text-primary transition-colors hover:bg-surface-container hover:border-tertiary-fixed-dim/40 focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
-						aria-expanded={isExpanded}
-					>
-						{isExpanded ? (
-							<>
-								Ler menos <ChevronUp size={16} />
-							</>
-						) : (
-							<>
-								Ler nossa história completa <ChevronDown size={16} />
-							</>
-						)}
-					</button>
+					{/* Botões de ação */}
+					<div className="mt-space-md flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+						<button
+							onClick={() => setIsExpanded(!isExpanded)}
+							className="flex items-center gap-2 rounded-md border border-outline-variant/30 bg-surface-container-low px-6 py-3 text-label-md uppercase tracking-widest text-primary transition-colors hover:bg-surface-container hover:border-tertiary-fixed-dim/40 focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
+							aria-expanded={isExpanded}
+						>
+							{isExpanded ? (
+								<>
+									Ler menos <ChevronUp size={16} />
+								</>
+							) : (
+								<>
+									Ler resumo <ChevronDown size={16} />
+								</>
+							)}
+						</button>
+						<Link
+							href="/nossa-historia"
+							className="inline-flex items-center gap-2 rounded-md bg-primary-container px-6 py-3 text-label-md uppercase tracking-widest text-tertiary-fixed shadow-md transition-all hover:bg-secondary hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
+						>
+							Conheça nossa história completa <ArrowRight size={16} />
+						</Link>
+					</div>
 				</div>
 
 				{/* Assinatura */}
