@@ -29,7 +29,7 @@ gsap.registerPlugin(ScrollTrigger);
  */
 function getImageAspect(src: string): string {
 	// Fotos conhecidas como verticais (retrato)
-	const verticalPhotos = ['001.jpeg', '003.jpeg', '005.jpeg', '008.jpeg'];
+	const verticalPhotos = ['001.jpeg', '002.jpeg', '003.jpeg', '005.jpeg', '008.jpeg'];
 	if (verticalPhotos.includes(src)) return 'aspect-[3/4]';
 	// Fotos conhecidas como horizontais (paisagem) ou quadradas
 	return 'aspect-[4/3]';
@@ -41,7 +41,7 @@ function getImageAspect(src: string): string {
 function getImagePosition(src: string): string {
 	const positions: Record<string, string> = {
 		'001.jpeg': 'object-center object-top',
-		'002.jpeg': 'object-center',
+		'002.jpeg': 'object-center object-top',
 		'003.jpeg': 'object-center object-top',
 		'005.jpeg': 'object-center',
 		'008.jpeg': 'object-center object-top',
