@@ -1,0 +1,127 @@
+- generic [active] [ref=e1]:
+  - navigation "Navegação principal" [ref=e2]:
+    - generic [ref=e3]:
+      - link "Andrey & Amanda" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - list [ref=e5]:
+        - listitem [ref=e6]:
+          - link "Início" [ref=e7] [cursor=pointer]:
+            - /url: "#inicio"
+        - listitem [ref=e9]:
+          - link "Nossa História" [ref=e10] [cursor=pointer]:
+            - /url: "#nossa-historia"
+        - listitem [ref=e11]:
+          - link "O Grande Dia" [ref=e12] [cursor=pointer]:
+            - /url: "#detalhes"
+        - listitem [ref=e13]:
+          - link "Recados e Orações" [ref=e14] [cursor=pointer]:
+            - /url: "#recados"
+        - listitem [ref=e15]:
+          - link "Confirmar Presença" [ref=e16] [cursor=pointer]:
+            - /url: /confirmar-presenca
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - img "Andrey e Amanda" [ref=e20]
+      - generic [ref=e23]:
+        - img "Logo do casamento Andrey e Amanda" [ref=e27]
+        - generic [ref=e28]:
+          - paragraph [ref=e29]: Sábado
+          - paragraph [ref=e30]: 12 DE DEZEMBRO DE 2026
+          - paragraph [ref=e31]: 19H
+        - paragraph [ref=e32]: “Deus escreveu a nossa história. Agora, diante d'Ele, escolhemos viver o nosso para sempre.”
+        - generic [ref=e33]:
+          - paragraph [ref=e34]: “E, sobre tudo isto, revesti-vos de amor, que é o vínculo da perfeição.”
+          - paragraph [ref=e35]: Colossenses 3:14
+        - link "Confirmar minha presença" [ref=e36] [cursor=pointer]:
+          - /url: /confirmar-presenca
+      - button "Rolar para próxima seção" [ref=e37]
+    - generic [ref=e41]:
+      - heading "Contagem Regressiva" [level=2] [ref=e42]
+      - generic [ref=e43]:
+        - generic [ref=e44]:
+          - generic [ref=e45]: "27"
+          - generic [ref=e46]: Dias
+        - generic [ref=e47]:
+          - generic [ref=e48]: "03"
+          - generic [ref=e49]: Horas
+        - generic [ref=e50]:
+          - generic [ref=e51]: "13"
+          - generic [ref=e52]: Minutos
+        - generic [ref=e53]:
+          - generic [ref=e54]: "01"
+          - generic [ref=e55]: Segundos
+      - paragraph [ref=e56]: até o nosso grande dia
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - text: Uma história escrita por Deus, vivida por nós.
+        - heading "Nossa História" [level=2] [ref=e60]
+      - generic [ref=e62]:
+        - generic [ref=e64]:
+          - generic: "2011"
+          - generic [ref=e65]:
+            - text: Os primeiros olhares
+            - heading "Onde tudo começou" [level=3] [ref=e66]
+            - paragraph [ref=e67]: Em meio à rotina de uma pequena loja no centro de Suzano e aos caminhos que o Andrey percorria todos os dias, nossos olhares começaram a se encontrar. Entre cumprimentos, sorrisos discretos e uma amizade sincera, algo bonito começava a nascer.
+          - img "Andrey e Amanda em 2011 — os primeiros olhares" [ref=e70]
+        - generic [ref=e71]:
+          - generic: "2021"
+          - generic [ref=e72]:
+            - text: Nosso reencontro
+            - heading "Um simples “oi”" [level=3] [ref=e73]
+            - paragraph [ref=e74]: Dez anos depois, nossos caminhos se cruzaram novamente. O que parecia ser somente um reencontro se transformou em conversas, novos sorrisos, um pedido de namoro e no início de uma das partes mais bonitas das nossas vidas.
+          - img "Andrey e Amanda em 2021 — o reencontro" [ref=e77]
+        - generic [ref=e78]:
+          - generic: ✦
+          - generic [ref=e79]:
+            - text: Nossa caminhada
+            - heading "Amor que amadureceu" [level=3] [ref=e80]
+            - paragraph [ref=e81]: Encontramos um no outro acolhimento, companheirismo, compreensão e um amor que nos ajudou a crescer e a cuidar das feridas do passado. Em cada etapa, Deus foi nos ensinando que o verdadeiro amor se constrói na fé, na parceria e na decisão diária de cuidar um do outro.
+          - img "Andrey e Amanda — nossa caminhada de amor e fé" [ref=e84]
+        - generic [ref=e85]:
+          - generic: 💍
+          - generic [ref=e86]:
+            - text: Nossa aliança
+            - heading "Um novo capítulo" [level=3] [ref=e87]
+            - paragraph [ref=e88]: Hoje firmamos uma aliança diante de Deus, colocando Jesus Cristo no centro da nossa família e entregando a Ele todos os capítulos que ainda vamos escrever. Porque o amor verdadeiro não é apenas encontrar alguém com quem dividir os dias, mas encontrar alguém com quem queremos viver os propósitos de Deus.
+          - img "Andrey e Amanda — nossa aliança diante de Deus" [ref=e91]
+      - generic [ref=e92]:
+        - paragraph [ref=e93]: Com amor,
+        - paragraph [ref=e94]: Andrey & Amanda
+    - generic [ref=e96]:
+      - generic [ref=e97]:
+        - text: Informações
+        - heading "Detalhes do Grande Dia" [level=2] [ref=e98]
+      - generic [ref=e100]:
+        - generic [ref=e101]:
+          - heading "Data" [level=3] [ref=e106]
+          - paragraph [ref=e107]: sábado, 12 de dezembro de 2026
+        - generic [ref=e108]:
+          - heading "Horário" [level=3] [ref=e114]
+          - paragraph [ref=e116]: "Cerimônia: 19:00"
+        - generic [ref=e117]:
+          - heading "Local" [level=3] [ref=e123]
+          - paragraph [ref=e124]: Local a ser confirmado
+    - generic [ref=e126]:
+      - generic [ref=e127]:
+        - heading "Deixe uma bênção para nossa nova caminhada" [level=2] [ref=e131]
+        - paragraph [ref=e132]: Suas palavras de carinho e orações são o maior presente que podemos receber.
+      - generic [ref=e133]:
+        - generic [ref=e134]:
+          - generic [ref=e135]: Seu nome
+          - textbox "Seu nome" [ref=e136]:
+            - /placeholder: Como você gostaria de assinar?
+        - generic [ref=e137]:
+          - generic [ref=e138]: Sua mensagem ou oração
+          - textbox "Sua mensagem ou oração" [ref=e139]:
+            - /placeholder: Escreva uma mensagem de carinho, uma oração ou seus votos para o casal...
+        - button "Enviar mensagem" [ref=e140]
+        - paragraph [ref=e144]: Sua mensagem será enviada aos noivos com todo carinho.
+    - generic [ref=e147]:
+      - paragraph [ref=e148]: “Até aqui o Senhor nos ajudou.”
+      - paragraph [ref=e149]: 1 Samuel 7:12
+      - img "Andrey e Amanda" [ref=e152]
+      - heading "Andrey & Amanda" [level=2] [ref=e153]
+      - paragraph [ref=e154]: “Com Deus à frente, o amor nos conduz.”
+      - paragraph [ref=e156]: Agradecemos por fazer parte da nossa história. Sua presença é o maior presente que podemos receber neste dia tão especial.
+  - button "Open Next.js Dev Tools" [ref=e162] [cursor=pointer]
+  - alert [ref=e166]

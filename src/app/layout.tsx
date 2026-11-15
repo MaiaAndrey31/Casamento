@@ -41,7 +41,7 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang="pt-BR" className={`${playfairDisplay.variable} ${dmSans.variable}`}>
-			<body className="bg-surface text-on-surface antialiased">
+			<body suppressHydrationWarning className="bg-surface text-on-surface antialiased">
 				{children}
 			</body>
 		</html>
