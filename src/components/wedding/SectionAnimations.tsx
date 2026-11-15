@@ -27,7 +27,8 @@ export function SectionAnimations() {
 		const ctx = gsap.context(() => {
 			// ── HERO ──────────────────────────────────────────────────────
 			const heroImage = document.querySelector('[data-hero-image]');
-			const heroTitle = document.querySelector('[data-hero-title]');
+			const heroLogo = document.querySelector('[data-hero-logo]');
+			const heroDate = document.querySelector('[data-hero-date]');
 			const heroMessage = document.querySelector('[data-hero-message]');
 			const heroVerse = document.querySelector('[data-hero-verse]');
 			const heroCta = document.querySelector('[data-hero-cta]');
@@ -53,19 +54,19 @@ export function SectionAnimations() {
 				});
 			}
 
-			if (heroTitle) {
-				gsap.from(heroTitle, {
-					y: 40,
+			if (heroLogo) {
+				gsap.from(heroLogo, {
+					y: 30,
 					opacity: 0,
-					duration: 1.2,
-					delay: 0.3,
+					duration: 1.4,
+					delay: 0.2,
 					ease: 'power3.out',
 				});
 			}
 
-			if (heroMessage) {
-				gsap.from(heroMessage, {
-					y: 30,
+			if (heroDate) {
+				gsap.from(heroDate, {
+					y: 25,
 					opacity: 0,
 					duration: 1,
 					delay: 0.6,
@@ -73,8 +74,8 @@ export function SectionAnimations() {
 				});
 			}
 
-			if (heroVerse) {
-				gsap.from(heroVerse, {
+			if (heroMessage) {
+				gsap.from(heroMessage, {
 					y: 20,
 					opacity: 0,
 					duration: 1,
@@ -83,12 +84,22 @@ export function SectionAnimations() {
 				});
 			}
 
+			if (heroVerse) {
+				gsap.from(heroVerse, {
+					y: 15,
+					opacity: 0,
+					duration: 1,
+					delay: 1.1,
+					ease: 'power3.out',
+				});
+			}
+
 			if (heroCta) {
 				gsap.from(heroCta, {
-					y: 20,
+					y: 15,
 					opacity: 0,
 					duration: 0.8,
-					delay: 1.2,
+					delay: 1.4,
 					ease: 'power3.out',
 				});
 			}

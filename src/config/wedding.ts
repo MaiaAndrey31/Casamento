@@ -1,84 +1,84 @@
 /**
  * Configuração Centralizada do Casamento Andrey e Amanda
  *
- * Valores iniciais para desenvolvimento. Serão substituídos por dados
- * do Firestore quando o Firebase estiver configurado.
+ * Valores oficiais do evento. São consumidos por todas as seções do convite,
+ * painel administrativo e cartões digitais.
  *
  * IMPORTANTE: Não inventar datas ou endereços fictícios como definitivos.
  */
 
 export const WEDDING_CONFIG = {
- coupleNames: 'Andrey & Amanda',
- monogram: 'A & A',
+	coupleNames: 'Andrey & Amanda',
+	monogram: 'A & A',
 
- // Data do evento — ISO 8601 com timezone America/Sao_Paulo
- // TODO: Substituir pela data real quando confirmada pelos noivos
- eventDate: null as string | null,
- timezone: 'America/Sao_Paulo',
+	// Data do evento — ISO 8601 com timezone America/Sao_Paulo
+	// 12 de dezembro de 2026 às 19h
+	eventDate: '2026-12-12T19:00:00-03:00',
+	timezone: 'America/Sao_Paulo',
 
- // Horários — serão preenchidos via painel admin
- ceremonyTime: null as string | null,
- receptionTime: null as string | null,
+	// Horários
+	ceremonyTime: '19:00',
+	receptionTime: null as string | null,
 
- // Local — será preenchido via painel admin
- venueName: null as string | null,
- venueAddress: null as string | null,
- mapsUrl: null as string | null,
- wazeUrl: null as string | null,
+	// Local — será preenchido via painel admin
+	venueName: null as string | null,
+	venueAddress: null as string | null,
+	mapsUrl: null as string | null,
+	wazeUrl: null as string | null,
 
- // Dress code
- dressCode: null as string | null,
+	// Dress code
+	dressCode: null as string | null,
 
- // Prazo RSVP
- rsvpDeadline: null as string | null,
- rsvpEnabled: true,
+	// Prazo RSVP
+	rsvpDeadline: null as string | null,
+	rsvpEnabled: true,
 
- // Mensagens cristãs
- heroMessage: 'Deus escreveu a nossa história. Agora, diante d\'Ele, escolhemos viver o nosso para sempre.',
- heroVerse: 'E, sobre tudo isto, revesti-vos de amor, que é o vínculo da perfeição.',
- heroVerseReference: 'Colossenses 3:14',
+	// Mensagens cristãs
+	heroMessage: 'Deus escreveu a nossa história. Agora, diante d\'Ele, escolhemos viver o nosso para sempre.',
+	heroVerse: 'E, sobre tudo isto, revesti-vos de amor, que é o vínculo da perfeição.',
+	heroVerseReference: 'Colossenses 3:14',
 
- closingMessage: 'Até aqui o Senhor nos ajudou.',
- closingVerseReference: '1 Samuel 7:12',
- closingSignature: 'Com Deus à frente, o amor nos conduz.',
+	closingMessage: 'Até aqui o Senhor nos ajudou.',
+	closingVerseReference: '1 Samuel 7:12',
+	closingSignature: 'Com Deus à frente, o amor nos conduz.',
 
- // Seção Nossa História
- storyTitle: 'Nossa História',
- storySubtitle: 'Uma história escrita por Deus, vivida por nós.',
+	// Seção Nossa História
+	storyTitle: 'Nossa História',
+	storySubtitle: 'Uma história escrita por Deus, vivida por nós.',
 
- storyTimeline: [
-   {
-     year: '2011',
-     label: 'Os primeiros olhares',
-     title: 'Onde tudo começou',
-     description: 'Em meio à rotina de uma pequena loja no centro de Suzano e aos caminhos que o Andrey percorria todos os dias, nossos olhares começaram a se encontrar. Entre cumprimentos, sorrisos discretos e uma amizade sincera, algo bonito começava a nascer.',
-     imageAsset: 'image.png',
-   },
-   {
-     year: '2021',
-     label: 'Nosso reencontro',
-     title: 'Um simples "oi"',
-     description: 'Dez anos depois, nossos caminhos se cruzaram novamente. O que parecia ser somente um reencontro se transformou em conversas, novos sorrisos, um pedido de namoro e no início de uma das partes mais bonitas das nossas vidas.',
-     imageAsset: 'WhatsApp Image 2026-11-14 at 20.14.43.jpeg',
-   },
-   {
-     year: '',
-     label: 'Nossa caminhada',
-     title: 'Amor que amadureceu',
-     description: 'Encontramos um no outro acolhimento, companheirismo, compreensão e um amor que nos ajudou a crescer e a cuidar das feridas do passado. Em cada etapa, Deus foi nos ensinando que o verdadeiro amor se constrói na fé, na parceria e na decisão diária de cuidar um do outro.',
-     imageAsset: 'Casal Feliz no Jardim Dourado.png',
-   },
-   {
-     year: '',
-     label: 'Nossa aliança',
-     title: 'Um novo capítulo',
-     description: 'Hoje firmamos uma aliança diante de Deus, colocando Jesus Cristo no centro da nossa família e entregando a Ele todos os capítulos que ainda vamos escrever.',
-     imageAsset: 'Abraço Romântico ao Pôr do Sol (1).png',
-   },
- ] as const,
+	storyTimeline: [
+		{
+			year: '2011',
+			label: 'Os primeiros olhares',
+			title: 'Onde tudo começou',
+			description: 'Em meio à rotina de uma pequena loja no centro de Suzano e aos caminhos que o Andrey percorria todos os dias, nossos olhares começaram a se encontrar. Entre cumprimentos, sorrisos discretos e uma amizade sincera, algo bonito começava a nascer.',
+			imageAsset: 'image.png',
+		},
+		{
+			year: '2021',
+			label: 'Nosso reencontro',
+			title: 'Um simples "oi"',
+			description: 'Dez anos depois, nossos caminhos se cruzaram novamente. O que parecia ser somente um reencontro se transformou em conversas, novos sorrisos, um pedido de namoro e no início de uma das partes mais bonitas das nossas vidas.',
+			imageAsset: 'WhatsApp Image 2026-11-14 at 20.14.43.jpeg',
+		},
+		{
+			year: '',
+			label: 'Nossa caminhada',
+			title: 'Amor que amadureceu',
+			description: 'Encontramos um no outro acolhimento, companheirismo, compreensão e um amor que nos ajudou a crescer e a cuidar das feridas do passado. Em cada etapa, Deus foi nos ensinando que o verdadeiro amor se constrói na fé, na parceria e na decisão diária de cuidar um do outro.',
+			imageAsset: 'Casal Feliz no Jardim Dourado.png',
+		},
+		{
+			year: '',
+			label: 'Nossa aliança',
+			title: 'Um novo capítulo',
+			description: 'Hoje firmamos uma aliança diante de Deus, colocando Jesus Cristo no centro da nossa família e entregando a Ele todos os capítulos que ainda vamos escrever.',
+			imageAsset: 'Abraço Romântico ao Pôr do Sol (1).png',
+		},
+	] as const,
 
- // Texto completo da história
- storyFullText: `Nossa história começou em 2011, de um jeito simples, daqueles que a gente nem imagina que um dia se transformarão em algo tão especial.
+	// Texto completo da história
+	storyFullText: `Nossa história começou em 2011, de um jeito simples, daqueles que a gente nem imagina que um dia se transformarão em algo tão especial.
 
 Em meio à rotina de uma pequena loja no centro de Suzano e aos caminhos que o Andrey percorria todos os dias, nossos olhares começaram a se encontrar. Entre cumprimentos, sorrisos discretos e uma amizade sincera, algo bonito começava a nascer. Naquele momento, não sabíamos o que o futuro nos reservava, muito menos que aqueles pequenos encontros fariam parte de uma história tão grande.
 
@@ -121,15 +121,15 @@ E, se Deus nos permitiu chegar até aqui, é com Ele à frente que queremos cont
  * Verifica se a data do evento está configurada.
  */
 export function isEventDateConfigured(): boolean {
- return WEDDING_CONFIG.eventDate !== null && WEDDING_CONFIG.eventDate !== '';
+	return WEDDING_CONFIG.eventDate !== null && WEDDING_CONFIG.eventDate !== '';
 }
 
 /**
  * Retorna a data do evento como Date ou null se não configurada.
  */
 export function getEventDate(): Date | null {
- if (!WEDDING_CONFIG.eventDate) return null;
- return new Date(WEDDING_CONFIG.eventDate);
+	if (!WEDDING_CONFIG.eventDate) return null;
+	return new Date(WEDDING_CONFIG.eventDate);
 }
 
 /**
@@ -137,5 +137,5 @@ export function getEventDate(): Date | null {
  * As imagens devem estar em public/assets/ para serem servidas pelo Next.js.
  */
 export function getAssetPath(assetName: string): string {
- return `/assets/${assetName}`;
+	return `/assets/${assetName}`;
 }

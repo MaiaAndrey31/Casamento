@@ -6,8 +6,8 @@ import { WEDDING_CONFIG, getAssetPath } from '@/config/wedding';
 
 /**
  * Hero — Nossa Aliança
- * Seção principal do convite com fotografia real do casal,
- * mensagem cristã e CTA para confirmação de presença.
+ * Seção principal do convite com nova logo, fotografia real do casal,
+ * data em destaque, mensagem cristã e CTA para confirmação de presença.
  */
 export function Hero() {
 	const scrollToNext = () => {
@@ -33,17 +33,31 @@ export function Hero() {
 
  {/* Conteúdo */}
  <div className="relative z-10 flex flex-col items-center px-gutter text-center pt-safe">
- {/* Monograma */}
- <div className="mb-space-md flex h-24 w-24 items-center justify-center rounded-full border border-tertiary-fixed-dim/30 bg-surface-container-lowest/80 backdrop-blur-sm shadow-lg md:h-32 md:w-32">
- <span className="text-headline-md text-primary-container md:text-display-hero-mobile">
- {WEDDING_CONFIG.monogram}
- </span>
+ {/* Nova Logo do Casamento */}
+ <div data-hero-logo className="mb-space-lg w-full max-w-[320px] md:max-w-[480px]">
+ <Image
+ src={getAssetPath('Logo de casamento Andrey & Amanda.png')}
+ alt="Logo do casamento Andrey e Amanda"
+ width={480}
+ height={320}
+ priority
+ className="h-auto w-full drop-shadow-lg"
+ sizes="(max-width: 768px) 320px, 480px"
+ />
  </div>
 
- {/* Nomes */}
- <h1 data-hero-title className="mb-space-sm text-display-hero-mobile text-surface-container-lowest drop-shadow-lg md:text-display-hero">
- {WEDDING_CONFIG.coupleNames}
- </h1>
+ {/* Data em destaque */}
+ <div data-hero-date className="mb-space-md space-y-1">
+ <p className="text-label-md uppercase tracking-[0.2em] text-tertiary-fixed drop-shadow-md md:text-title-md">
+ Sábado
+ </p>
+ <p className="text-headline-lg-mobile font-light text-surface-container-lowest drop-shadow-lg md:text-display-hero-mobile">
+ 12 DE DEZEMBRO DE 2026
+ </p>
+ <p className="text-headline-sm text-tertiary-fixed-dim drop-shadow-md md:text-headline-md">
+ 19H
+ </p>
+ </div>
 
  {/* Mensagem principal */}
  <p data-hero-message className="max-w-lg text-body-lg italic text-surface-container-low drop-shadow-md md:text-headline-sm">
