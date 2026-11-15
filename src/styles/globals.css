@@ -1,0 +1,309 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   DESIGN SYSTEM — Botanical Heirloom (Google Stitch)
+   Casamento Andrey e Amanda
+
+   Tokens extraídos de: stitch_casamento_andrey_e_amanda/botanical_heirloom/DESIGN.md
+   ============================================================================ */
+
+@theme {
+  /* ── Cores: Superfície ─────────────────────────────────────────────── */
+  --color-surface: #fff8f3;
+  --color-surface-dim: #e2d9ce;
+  --color-surface-bright: #fff8f3;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #fcf2e7;
+  --color-surface-container: #f6ece1;
+  --color-surface-container-high: #f1e7dc;
+  --color-surface-container-highest: #ebe1d6;
+  --color-surface-variant: #ebe1d6;
+  --color-surface-tint: #546255;
+
+  /* ── Cores: Texto sobre superfície ─────────────────────────────────── */
+  --color-on-surface: #1f1b14;
+  --color-on-surface-variant: #434843;
+  --color-on-background: #1f1b14;
+
+  /* ── Cores: Inverso ────────────────────────────────────────────────── */
+  --color-inverse-surface: #353028;
+  --color-inverse-on-surface: #f9efe4;
+  --color-inverse-primary: #bbcbbb;
+
+  /* ── Cores: Primária (Verde Floresta) ──────────────────────────────── */
+  --color-primary: #030e06;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #18251b;
+  --color-on-primary-container: #7e8d7f;
+  --color-primary-fixed: #d7e7d7;
+  --color-primary-fixed-dim: #bbcbbb;
+  --color-on-primary-fixed: #121e15;
+  --color-on-primary-fixed-variant: #3c4a3f;
+
+  /* ── Cores: Secundária (Oliva Suave) ───────────────────────────────── */
+  --color-secondary: #566250;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #dae7d0;
+  --color-on-secondary-container: #5c6855;
+  --color-secondary-fixed: #dae7d0;
+  --color-secondary-fixed-dim: #becab4;
+  --color-on-secondary-fixed: #141e10;
+  --color-on-secondary-fixed-variant: #3f4a39;
+
+  /* ── Cores: Terciária (Champagne / Dourado) ────────────────────────── */
+  --color-tertiary: #120a00;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #2f1f00;
+  --color-on-tertiary-container: #a2854f;
+  --color-tertiary-fixed: #ffdea5;
+  --color-tertiary-fixed-dim: #e4c286;
+  --color-on-tertiary-fixed: #271900;
+  --color-on-tertiary-fixed-variant: #5a4313;
+
+  /* ── Cores: Erro ───────────────────────────────────────────────────── */
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* ── Cores: Outline ────────────────────────────────────────────────── */
+  --color-outline: #747873;
+  --color-outline-variant: #c3c8c1;
+
+  /* ── Background ────────────────────────────────────────────────────── */
+  --color-background: #fff8f3;
+
+  /* ── Tipografia ────────────────────────────────────────────────────── */
+  --font-display-hero: "Playfair Display", serif;
+  --font-headline: "Playfair Display", serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-label: "DM Sans", sans-serif;
+  --font-title: "DM Sans", sans-serif;
+
+  /* ── Tamanhos de fonte (do DESIGN.md) ──────────────────────────────── */
+  --text-display-hero: 56px;
+  --text-display-hero-mobile: 38px;
+  --text-headline-lg: 40px;
+  --text-headline-lg-mobile: 30px;
+  --text-headline-md: 28px;
+  --text-headline-sm: 22px;
+  --text-title-md: 18px;
+  --text-body-lg: 17px;
+  --text-body-md: 15px;
+  --text-body-sm: 13px;
+  --text-label-md: 12px;
+  --text-label-sm: 11px;
+
+  /* ── Line heights ──────────────────────────────────────────────────── */
+  --leading-display-hero: 64px;
+  --leading-display-hero-mobile: 46px;
+  --leading-headline-lg: 48px;
+  --leading-headline-lg-mobile: 38px;
+  --leading-headline-md: 36px;
+  --leading-headline-sm: 30px;
+  --leading-title-md: 26px;
+  --leading-body-lg: 28px;
+  --leading-body-md: 24px;
+  --leading-body-sm: 20px;
+  --leading-label-md: 16px;
+  --leading-label-sm: 14px;
+
+  /* ── Letter spacing ────────────────────────────────────────────────── */
+  --tracking-display-hero: -0.02em;
+  --tracking-display-hero-mobile: -0.01em;
+  --tracking-headline-lg: -0.01em;
+  --tracking-title-md: 0.01em;
+  --tracking-label-md: 0.08em;
+  --tracking-label-sm: 0.1em;
+
+  /* ── Espaçamento (do DESIGN.md) ────────────────────────────────────── */
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-lg: 1.5rem;
+  --spacing-space-xl: 2.5rem;
+  --spacing-space-2xl: 4rem;
+  --spacing-gutter: 1.25rem;
+  --spacing-gutter-desktop: 2.5rem;
+  --spacing-margin: 1.25rem;
+  --spacing-margin-desktop: 4rem;
+
+  /* ── Border radius ─────────────────────────────────────────────────── */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+}
+
+/* ============================================================================
+   BASE STYLES
+   ============================================================================ */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    font-family: var(--font-body);
+    font-size: var(--text-body-md);
+    line-height: var(--leading-body-md);
+    overscroll-behavior: none;
+  }
+
+  /* Safe area para dispositivos com notch */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Scrollbar oculta para nav mobile (como no Stitch) */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Seleção de texto com cor do tema */
+  ::selection {
+    background-color: var(--color-secondary-container);
+    color: var(--color-on-secondary-container);
+  }
+}
+
+/* ============================================================================
+   TYPOGRAPHY UTILITIES
+   Mapeia as classes do Stitch para utilities reutilizáveis
+   ============================================================================ */
+
+@layer utilities {
+  /* Display Hero */
+  .text-display-hero {
+    font-family: var(--font-display-hero);
+    font-size: var(--text-display-hero);
+    line-height: var(--leading-display-hero);
+    letter-spacing: var(--tracking-display-hero);
+    font-weight: 400;
+  }
+  .text-display-hero-mobile {
+    font-family: var(--font-display-hero);
+    font-size: var(--text-display-hero-mobile);
+    line-height: var(--leading-display-hero-mobile);
+    letter-spacing: var(--tracking-display-hero-mobile);
+    font-weight: 400;
+  }
+
+  /* Headlines */
+  .text-headline-lg {
+    font-family: var(--font-headline);
+    font-size: var(--text-headline-lg);
+    line-height: var(--leading-headline-lg);
+    letter-spacing: var(--tracking-headline-lg);
+    font-weight: 400;
+  }
+  .text-headline-lg-mobile {
+    font-family: var(--font-headline);
+    font-size: var(--text-headline-lg-mobile);
+    line-height: var(--leading-headline-lg-mobile);
+    font-weight: 400;
+  }
+  .text-headline-md {
+    font-family: var(--font-headline);
+    font-size: var(--text-headline-md);
+    line-height: var(--leading-headline-md);
+    font-weight: 500;
+  }
+  .text-headline-sm {
+    font-family: var(--font-headline);
+    font-size: var(--text-headline-sm);
+    line-height: var(--leading-headline-sm);
+    font-weight: 600;
+  }
+
+  /* Title */
+  .text-title-md {
+    font-family: var(--font-title);
+    font-size: var(--text-title-md);
+    line-height: var(--leading-title-md);
+    letter-spacing: var(--tracking-title-md);
+    font-weight: 500;
+  }
+
+  /* Body */
+  .text-body-lg {
+    font-family: var(--font-body);
+    font-size: var(--text-body-lg);
+    line-height: var(--leading-body-lg);
+    font-weight: 400;
+  }
+  .text-body-md {
+    font-family: var(--font-body);
+    font-size: var(--text-body-md);
+    line-height: var(--leading-body-md);
+    font-weight: 400;
+  }
+  .text-body-sm {
+    font-family: var(--font-body);
+    font-size: var(--text-body-sm);
+    line-height: var(--leading-body-sm);
+    font-weight: 400;
+  }
+
+  /* Labels */
+  .text-label-md {
+    font-family: var(--font-label);
+    font-size: var(--text-label-md);
+    line-height: var(--leading-label-md);
+    letter-spacing: var(--tracking-label-md);
+    font-weight: 600;
+  }
+  .text-label-sm {
+    font-family: var(--font-label);
+    font-size: var(--text-label-sm);
+    line-height: var(--leading-label-sm);
+    letter-spacing: var(--tracking-label-sm);
+    font-weight: 600;
+  }
+}
+
+/* ============================================================================
+   REDUCED MOTION
+   Respeita preferência do usuário por menos animações
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   PRINT STYLES
+   ============================================================================ */
+
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  nav,
+  header,
+  button,
+  .no-print {
+    display: none !important;
+  }
+}

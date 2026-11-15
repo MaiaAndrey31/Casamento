@@ -1,0 +1,123 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========================================================================
+    // HELPERS
+    // ========================================================================
+
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isValidString(field, minLen, maxLen) {
+      return field is string
+        && field.size() >= minLen
+        && field.size() <= maxLen;
+    }
+
+    // ========================================================================
+    // EVENTOS — Leitura pública, escrita apenas admin
+    // ========================================================================
+
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if false; // Eventos não devem ser deletados, apenas arquivados
+
+      // Subcoleções do evento
+      match /invitations/{invitationId} {
+        // Convites NUNCA são lidos diretamente pelo cliente.
+        // O acesso é feito via Server Action que valida o token.
+        allow read: if false;
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if false; // Exclusão lógica via campo `invitationStatus`
+      }
+
+      match /guests/{guestId} {
+        // Convidados não podem ser listados publicamente.
+        // Apenas admin pode gerenciar.
+        allow read: if isAdmin();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if false; // Exclusão lógica via campo `active`
+      }
+
+      match /rsvps/{rsvpId} {
+        // RSVP: convidado pode criar/editar seu próprio RSVP
+        // Admin pode ler e moderar todos
+        allow read: if isAdmin()
+          || (request.auth != null && resource.data.invitationId == rsvpId);
+        allow create: if request.auth != null
+          && isValidString(request.resource.data.fullName, 3, 200)
+          && request.resource.data.attendanceStatus in ['confirmed', 'declined']
+          && request.resource.data.invitationId == rsvpId;
+        allow update: if request.auth != null
+          && resource.data.invitationId == rsvpId
+          && request.resource.data.revision == resource.data.revision + 1;
+        allow delete: if isAdmin();
+      }
+
+      match /messages/{messageId} {
+        // Mensagens aprovadas são públicas. Pendentes/rejeitadas só para admin.
+        allow read: if (resource.data.moderationStatus == 'approved')
+          || isAdmin();
+        allow create: if request.auth != null
+          && isValidString(request.resource.data.authorName, 2, 100)
+          && isValidString(request.resource.data.message, 10, 2000)
+          && request.resource.data.moderationStatus == 'pending';
+        allow update: if isAdmin(); // Aprovar/rejeitar
+        allow delete: if isAdmin();
+      }
+
+      match /checkins/{checkinId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin();
+        allow update: if false; // Check-ins são imutáveis após criação
+        allow delete: if false;
+      }
+
+      match /media/{mediaId} {
+        allow read: if true; // Galeria pública
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin();
+        allow update: if false; // Logs são imutáveis
+        allow delete: if false;
+      }
+    }
+
+    // ========================================================================
+    // ADMINS — Gerenciado via Firebase Console ou script de seed
+    // ========================================================================
+
+    match /admins/{uid} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow create: if false; // Criar via console ou script seguro
+      allow update: if isAdmin();
+      allow delete: if false; // Desativar via campo `active`
+    }
+
+    // ========================================================================
+    // BLOQUEIO GERAL — Negar tudo que não foi explicitamente permitido
+    // ========================================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
