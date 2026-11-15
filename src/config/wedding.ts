@@ -66,7 +66,7 @@ export const WEDDING_CONFIG = {
 			label: 'Nossa caminhada',
 			title: 'Amor que amadureceu',
 			description: 'Encontramos um no outro acolhimento, companheirismo, compreensão e um amor que nos ajudou a crescer e a cuidar das feridas do passado. Em cada etapa, Deus foi nos ensinando que o verdadeiro amor se constrói na fé, na parceria e na decisão diária de cuidar um do outro.',
-			imageAsset: 'Casal Feliz no Jardim Dourado.png',
+			imageAsset: 'bannerHero.png',
 		},
 		{
 			year: '',

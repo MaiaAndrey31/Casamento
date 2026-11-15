@@ -230,7 +230,7 @@ export function StoryAnimations() {
  <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-outline-variant/20 shadow-lg">
  {/* eslint-disable-next-line @next/next/no-img-element */}
  <img
- src="/assets/Casal Feliz no Jardim Dourado.png"
+ src="/assets/bannerHero.png"
  alt="Andrey e Amanda — nossa caminhada de amor e fé"
  className="h-full w-full object-cover"
  loading="lazy"

@@ -20,7 +20,7 @@ export function Hero() {
  {/* Background image com overlay */}
  <div data-hero-image className="absolute inset-0 z-0">
  <Image
- src={getAssetPath('Casal Feliz no Jardim Dourado.png')}
+ src={getAssetPath('bannerHero.png')}
  alt="Andrey e Amanda em jardim dourado"
  fill
  priority

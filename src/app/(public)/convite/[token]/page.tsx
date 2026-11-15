@@ -41,7 +41,7 @@ export default async function InvitationPage({ params }: PageProps) {
  {/* Background */}
  <div className="absolute inset-0 z-0">
  <Image
- src={getAssetPath('Casal Feliz no Jardim Dourado.png')}
+ src={getAssetPath('bannerHero.png')}
  alt="Andrey e Amanda"
  fill
  priority

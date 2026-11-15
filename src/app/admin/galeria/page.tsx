@@ -36,7 +36,7 @@ export default async function AdminGaleriaPage() {
 
 	// Fotos estáticas existentes em public/assets/
 	const staticPhotos = [
-		{ src: '/assets/Casal Feliz no Jardim Dourado.png', alt: 'Casal no jardim dourado', category: 'hero' },
+		{ src: '/assets/bannerHero.png', alt: 'Banner Hero do casamento', category: 'hero' },
 		{ src: '/assets/Abraço Romântico ao Pôr do Sol (1).png', alt: 'Abraço ao pôr do sol', category: 'closing' },
 		{ src: '/assets/image.png', alt: 'Ensaio do casal', category: 'story' },
 		{ src: '/assets/WhatsApp Image 2026-11-14 at 20.14.43.jpeg', alt: 'Foto espontânea', category: 'gallery' },
