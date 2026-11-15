@@ -26,27 +26,69 @@ function LoginForm() {
 		setLoading(true);
 
 		try {
-			const userCredential = await signInWithEmailAndPassword(auth, email, password);
+			// Etapa 1: Autenticação com Firebase Auth
+			let userCredential;
+			try {
+				userCredential = await signInWithEmailAndPassword(auth, email, password);
+			} catch (authErr) {
+				// Erros de autenticação do Firebase
+				if (authErr instanceof Error && authErr.message.includes('auth/')) {
+					setError('Email ou senha incorretos. Verifique suas credenciais.');
+					return;
+				}
+				setError('Erro de conexão. Verifique sua internet e tente novamente.');
+				return;
+			}
+
+			// Etapa 2: Obter ID Token
 			const idToken = await userCredential.user.getIdToken();
 
-			// Definir cookie de sessão via API segura
-			const response = await fetch('/api/admin/session', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ idToken }),
-			});
-
-			if (!response.ok) {
-				throw new Error('Falha ao criar sessão administrativa.');
+			// Etapa 3: Enviar token para API de sessão
+			let response;
+			try {
+				response = await fetch('/api/admin/session', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ idToken }),
+				});
+			} catch {
+				setError('Não foi possível conectar ao servidor. Tente novamente em alguns instantes.');
+				return;
 			}
 
+			// Etapa 4: Interpretar resposta da API com mensagens diferenciadas
+			if (!response.ok) {
+				let errorMessage = 'Erro desconhecido ao criar sessão.';
+				try {
+					const errorBody = await response.json();
+					if (errorBody?.error) {
+						errorMessage = errorBody.error;
+					}
+				} catch {
+					// Se não conseguir parsear o JSON, usar status code
+					switch (response.status) {
+						case 400:
+							errorMessage = 'Dados de autenticação inválidos.';
+							break;
+						case 401:
+							errorMessage = 'Sessão expirada. Faça login novamente.';
+							break;
+						case 403:
+							errorMessage = 'Seu usuário não possui permissão administrativa. Entre em contato com os noivos para ser autorizado.';
+							break;
+						case 500:
+							errorMessage = 'Erro interno no servidor. Tente novamente em alguns instantes.';
+							break;
+					}
+				}
+				setError(errorMessage);
+				return;
+			}
+
+			// Etapa 5: Sucesso — redirecionar
 			router.push(redirect);
 		} catch (err) {
-			if (err instanceof Error && err.message.includes('auth/')) {
-				setError('Email ou senha incorretos.');
-			} else {
-				setError(err instanceof Error ? err.message : 'Erro ao fazer login.');
-			}
+			setError(err instanceof Error ? err.message : 'Erro inesperado ao fazer login.');
 		} finally {
 			setLoading(false);
 		}
