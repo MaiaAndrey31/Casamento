@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Playfair_Display, DM_Sans } from 'next/font/google';
-import { DesktopNav } from '@/components/wedding/DesktopNav';
 import '@/styles/globals.css';
 
 const playfairDisplay = Playfair_Display({
@@ -28,6 +27,13 @@ export const metadata: Metadata = {
 	},
 };
 
+/**
+ * Layout Raiz — Compartilhado por TODAS as rotas (públicas e admin).
+ *
+ * Contém apenas: HTML shell, fontes Google, CSS global.
+ * NÃO contém DesktopNav — esse está no layout do grupo (public).
+ * Rotas /admin/* herdam APENAS este layout + admin/layout.tsx.
+ */
 export default function RootLayout({
 	children,
 }: Readonly<{
@@ -36,7 +42,6 @@ export default function RootLayout({
 	return (
 		<html lang="pt-BR" className={`${playfairDisplay.variable} ${dmSans.variable}`}>
 			<body className="bg-surface text-on-surface antialiased">
-				<DesktopNav />
 				{children}
 			</body>
 		</html>
