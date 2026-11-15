@@ -50,6 +50,9 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+# ── Playwright MCP (snapshots/logs locais) ──────────────────────────────────
+.playwright-mcp/
+
 # ── Misc ────────────────────────────────────────────────────────────────────
 *.tsbuildinfo
 next-env.d.ts

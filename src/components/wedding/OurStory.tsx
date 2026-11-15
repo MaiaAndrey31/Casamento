@@ -4,12 +4,14 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
-import { WEDDING_CONFIG, getAssetPath } from '@/config/wedding';
+import { WEDDING_CONFIG } from '@/config/wedding';
+import { HOME_TIMELINE_SUMMARY, OUR_STORY } from '@/content/our-story';
+import { getAssetPath } from '@/config/wedding';
 
 /**
- * Nossa História — Seção com timeline visual e texto completo.
- * Apresenta os 4 momentos da história de Andrey e Amanda
- * com fotografias reais e texto oficial fornecido pelos noivos.
+ * Nossa História — Seção da home com timeline resumida.
+ * Consome HOME_TIMELINE_SUMMARY da fonte canônica our-story.ts.
+ * Botão "Leia nossa história completa" navega para /nossa-historia.
  */
 export function OurStory() {
 	const [isExpanded, setIsExpanded] = useState(false);
@@ -20,7 +22,7 @@ export function OurStory() {
 				{/* Título da seção */}
 				<div className="mb-space-2xl text-center">
 					<span className="text-label-md uppercase tracking-widest text-tertiary-fixed-dim">
-						{WEDDING_CONFIG.storySubtitle}
+						{OUR_STORY.subtitle}
 					</span>
 					<h2 className="mt-space-sm text-headline-lg-mobile text-primary md:text-headline-lg">
 						{WEDDING_CONFIG.storyTitle}
@@ -28,14 +30,13 @@ export function OurStory() {
 					<div className="mx-auto mt-space-md h-px w-16 bg-tertiary-fixed-dim/40" />
 				</div>
 
-				{/* Timeline visual */}
+				{/* Timeline visual — 3 blocos resumidos da fonte canônica */}
 				<div className="relative space-y-space-xl">
 					{/* Linha vertical decorativa */}
 					<div className="absolute left-4 top-0 bottom-0 w-px bg-outline-variant/30 md:left-1/2 md:-translate-x-px" />
 
-					{WEDDING_CONFIG.storyTimeline.map((item, index) => {
+					{HOME_TIMELINE_SUMMARY.map((item, index) => {
 						const isEven = index % 2 === 0;
-						const hasImage = item.imageAsset !== undefined;
 
 						return (
 							<div
@@ -65,25 +66,23 @@ export function OurStory() {
 								</div>
 
 								{/* Fotografia */}
-								{hasImage && (
-									<div className={`ml-12 flex-1 md:ml-0 ${isEven ? 'md:pl-12' : 'md:pr-12'}`}>
-										<div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-outline-variant/20 shadow-md">
-											<Image
-												src={getAssetPath(item.imageAsset!)}
-												alt={`${item.title} — ${item.label}`}
-												fill
-												className="object-cover"
-												sizes="(max-width: 768px) 100vw, 50vw"
-											/>
-										</div>
+								<div className={`ml-12 flex-1 md:ml-0 ${isEven ? 'md:pl-12' : 'md:pr-12'}`}>
+									<div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-outline-variant/20 shadow-md">
+										<Image
+											src={getAssetPath(item.imageAsset)}
+											alt={`${item.title} — ${item.label}`}
+											fill
+											className="object-cover"
+											sizes="(max-width: 768px) 100vw, 50vw"
+										/>
 									</div>
-								)}
+								</div>
 							</div>
 						);
 					})}
 				</div>
 
-				{/* Texto completo expansível */}
+				{/* Texto completo expansível (resumo da narrativa canônica) */}
 				<div className="mt-space-2xl border-t border-outline-variant/20 pt-space-xl">
 					<div className={`overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-48 opacity-80'}`}>
 						<div className="prose prose-neutral mx-auto max-w-2xl text-body-md text-on-surface-variant leading-loose whitespace-pre-line">
@@ -117,7 +116,7 @@ export function OurStory() {
 							href="/nossa-historia"
 							className="inline-flex items-center gap-2 rounded-md bg-primary-container px-6 py-3 text-label-md uppercase tracking-widest text-tertiary-fixed shadow-md transition-all hover:bg-secondary hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
 						>
-							Conheça nossa história completa <ArrowRight size={16} />
+							Leia nossa história completa <ArrowRight size={16} />
 						</Link>
 					</div>
 				</div>

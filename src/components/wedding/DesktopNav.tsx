@@ -17,12 +17,12 @@ import { WEDDING_CONFIG } from '@/config/wedding';
  * - Oculto em mobile (< md), onde WeddingNavigation já atua.
  */
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { label: string; href: string; sectionId: string | null }[] = [
 	{ label: 'Início', href: '#inicio', sectionId: 'inicio' },
-	{ label: 'Nossa História', href: '#nossa-historia', sectionId: 'nossa-historia' },
+	{ label: 'Nossa História', href: '/nossa-historia', sectionId: null },
 	{ label: 'O Grande Dia', href: '#detalhes', sectionId: 'detalhes' },
 	{ label: 'Recados e Orações', href: '#recados', sectionId: 'recados' },
-] as const;
+];
 
 export function DesktopNav() {
 	const pathname = usePathname();
@@ -44,7 +44,7 @@ export function DesktopNav() {
 		const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 		if (prefersReducedMotion) return;
 
-		const sectionIds = NAV_ITEMS.map(item => item.sectionId);
+		const sectionIds = NAV_ITEMS.map(item => item.sectionId).filter((id): id is string => id !== null);
 		const observers: IntersectionObserver[] = [];
 
 		sectionIds.forEach(id => {
