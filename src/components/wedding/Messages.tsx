@@ -26,7 +26,7 @@ export function Messages() {
 		<section id="recados" className="bg-surface py-space-2xl px-gutter">
 			<div className="mx-auto max-w-2xl">
 				{/* Título */}
-				<div className="mb-space-xl text-center">
+				<div data-messages-title className="mb-space-xl text-center">
 					<div className="mx-auto mb-space-md flex h-12 w-12 items-center justify-center rounded-full bg-tertiary-fixed/20">
 						<Heart size={24} className="text-primary-container" />
 					</div>
@@ -59,7 +59,7 @@ export function Messages() {
 						</button>
 					</div>
 				) : (
-					<form onSubmit={handleSubmit} className="space-y-space-md">
+					<form data-messages-form onSubmit={handleSubmit} className="space-y-space-md">
 						{/* Nome */}
 						<div>
 							<label htmlFor="authorName" className="mb-space-xs block text-label-md uppercase tracking-widest text-on-surface-variant">

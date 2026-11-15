@@ -16,7 +16,7 @@ export function EventDetails() {
 		<section id="detalhes" className="bg-surface-container-low py-space-2xl px-gutter">
 			<div className="mx-auto max-w-3xl">
 				{/* Título */}
-				<div className="mb-space-xl text-center">
+				<div data-details-title className="mb-space-xl text-center">
 					<span className="text-label-md uppercase tracking-widest text-tertiary-fixed-dim">
 						Informações
 					</span>
@@ -29,7 +29,7 @@ export function EventDetails() {
 				{/* Grid de cards */}
 				<div className="grid gap-space-md md:grid-cols-2">
 					{/* Data */}
-					<div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm">
+					<div data-details-card className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm">
 						<div className="mb-space-sm flex items-center gap-3">
 							<div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container/50">
 								<Calendar size={20} className="text-primary-container" />
@@ -54,7 +54,7 @@ export function EventDetails() {
 					</div>
 
 					{/* Horário */}
-					<div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm">
+					<div data-details-card className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm">
 						<div className="mb-space-sm flex items-center gap-3">
 							<div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container/50">
 								<Clock size={20} className="text-primary-container" />
@@ -82,7 +82,7 @@ export function EventDetails() {
 					</div>
 
 					{/* Local */}
-					<div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm md:col-span-2">
+					<div data-details-card className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm md:col-span-2">
 						<div className="mb-space-sm flex items-center gap-3">
 							<div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container/50">
 								<MapPin size={20} className="text-primary-container" />
@@ -134,7 +134,7 @@ export function EventDetails() {
 
 					{/* Dress Code */}
 					{hasDressCode && (
-						<div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm md:col-span-2">
+						<div data-details-card className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-space-lg shadow-sm md:col-span-2">
 							<div className="mb-space-sm flex items-center gap-3">
 								<div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container/50">
 									<Shirt size={20} className="text-primary-container" />

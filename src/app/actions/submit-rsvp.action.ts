@@ -4,7 +4,8 @@
  * Server Action — Submissão de RSVP (Confirmação de Presença)
  *
  * Valida entrada com Zod, verifica convite e persiste no Firestore via transação.
- * Ao confirmar presença, gera checkInToken opaco e retorna para o QR Code do cartão digital.
+ * Ao confirmar presença pela PRIMEIRA VEZ, gera checkInToken opaco e retorna para o QR Code.
+ * Em edições subsequentes, preserva o token existente (não invalida cartão digital).
  * Retorna resposta padronizada sem expor dados internos.
  */
 
@@ -45,7 +46,7 @@ export async function submitRsvpAction(
 	// 3. Persistência via transação (controle de concorrência)
 	const result = await submitRSVP(eventId, formData.invitationId, {
 		attendanceStatus: validation.data.attendanceStatus,
-		confirmedGuestIds: [], // Será preenchido quando convites estiverem totalmente implementados
+		confirmedGuestIds: [],
 		companions: validation.data.companions,
 		dietaryRestrictions: validation.data.dietaryRestrictions,
 		songSuggestion: validation.data.songSuggestion || '',
@@ -59,7 +60,8 @@ export async function submitRsvpAction(
 		};
 	}
 
-	// 4. Se confirmado, gerar checkInToken opaco para o QR Code do cartão digital
+	// 4. Gerar checkInToken APENAS se confirmado E se ainda não existir um token válido
+	//    Isso evita invalidar cartões digitais em edições subsequentes do RSVP
 	let checkInToken: string | undefined;
 
 	if (validation.data.attendanceStatus === 'confirmed') {
@@ -67,23 +69,36 @@ export async function submitRsvpAction(
 			const { adminDb, generateSecureToken, hashToken } = await import('@/lib/firebase/admin');
 			const { FieldValue } = await import('firebase-admin/firestore');
 
-			// Gerar novo token de check-in exclusivo para este convite
-			checkInToken = generateSecureToken();
-			const checkInTokenHash = await hashToken(checkInToken);
-
-			// Armazenar hash no convite (substitui qualquer token anterior, invalidando QR Codes antigos)
-			await adminDb
+			// Verificar se já existe um checkInTokenHash neste convite
+			const invitationDoc = await adminDb
 				.collection('events')
 				.doc(eventId)
 				.collection('invitations')
 				.doc(formData.invitationId)
-				.update({
-					checkInTokenHash,
-					updatedAt: FieldValue.serverTimestamp(),
-				});
+				.get();
+
+			const existingHash = invitationDoc.exists ? invitationDoc.data()?.checkInTokenHash : null;
+
+			if (!existingHash) {
+				// Primeira confirmação: gerar novo token
+				checkInToken = generateSecureToken();
+				const checkInTokenHash = await hashToken(checkInToken);
+
+				await adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection('invitations')
+					.doc(formData.invitationId)
+					.update({
+						checkInTokenHash,
+						updatedAt: FieldValue.serverTimestamp(),
+					});
+			}
+			// Se já existe hash, NÃO regenerar — preservar cartão digital existente
+			// O token não é retornado em edições subsequentes (hash é unidirecional)
 		} catch (e) {
-			console.error('[SubmitRSVP] Falha ao gerar checkInToken:', e);
-			// Não falhar o RSVP por causa do token — o admin pode regenerar depois
+			console.error('[SubmitRSVP] Falha ao verificar/gerar checkInToken:', e);
+			// Não falhar o RSVP por causa do token
 			checkInToken = undefined;
 		}
 	}

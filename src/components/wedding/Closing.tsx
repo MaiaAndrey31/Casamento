@@ -21,7 +21,7 @@ export function Closing() {
 
 			<div className="relative z-10 mx-auto max-w-2xl text-center">
 				{/* Versículo de encerramento */}
-				<p className="text-headline-lg-mobile italic text-tertiary-fixed md:text-headline-lg">
+				<p data-closing-verse className="text-headline-lg-mobile italic text-tertiary-fixed md:text-headline-lg">
 					&ldquo;{WEDDING_CONFIG.closingMessage}&rdquo;
 				</p>
 				<p className="mt-space-sm text-label-md uppercase tracking-widest text-tertiary-fixed-dim/80">
@@ -32,7 +32,7 @@ export function Closing() {
 				<div className="mx-auto my-space-xl h-px w-24 bg-tertiary-fixed-dim/30" />
 
 				{/* Fotografia do casal */}
-				<div className="mx-auto mb-space-xl relative aspect-square w-48 overflow-hidden rounded-full border-4 border-tertiary-fixed-dim/20 shadow-2xl md:w-64">
+				<div data-closing-photo className="mx-auto mb-space-xl relative aspect-square w-48 overflow-hidden rounded-full border-4 border-tertiary-fixed-dim/20 shadow-2xl md:w-64">
 					<Image
 						src={getAssetPath('Abraço Romântico ao Pôr do Sol (1).png')}
 						alt="Andrey e Amanda"
@@ -43,15 +43,15 @@ export function Closing() {
 				</div>
 
 				{/* Assinatura */}
-				<h2 className="text-display-hero-mobile text-surface-container-lowest md:text-headline-lg">
+				<h2 data-closing-names className="text-display-hero-mobile text-surface-container-lowest md:text-headline-lg">
 					{WEDDING_CONFIG.coupleNames}
 				</h2>
-				<p className="mt-space-md text-body-lg italic text-tertiary-fixed/90">
+				<p data-closing-signature className="mt-space-md text-body-lg italic text-tertiary-fixed/90">
 					&ldquo;{WEDDING_CONFIG.closingSignature}&rdquo;
 				</p>
 
 				{/* Mensagem final aos convidados */}
-				<div className="mt-space-2xl rounded-xl border border-tertiary-fixed-dim/10 bg-surface-container-lowest/5 p-space-lg backdrop-blur-sm">
+				<div data-closing-gratitude className="mt-space-2xl rounded-xl border border-tertiary-fixed-dim/10 bg-surface-container-lowest/5 p-space-lg backdrop-blur-sm">
 					<p className="text-body-md text-surface-container-low/90">
 						Agradecemos por fazer parte da nossa história. Sua presença é o maior presente que podemos receber neste dia tão especial.
 					</p>

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera, Search, CheckCircle, XCircle, AlertTriangle, UserCheck, Users, QrCode } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Camera, Search, CheckCircle, XCircle, AlertTriangle, UserCheck, QrCode } from 'lucide-react';
 import { checkInByQrCode, searchGuestsForCheckIn, checkInManually } from '@/app/actions/checkin.action';
 
 type CheckInStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'error' | 'duplicate';
@@ -16,7 +16,7 @@ interface CheckInResult {
 /**
  * Tela de Check-in — /admin/check-in
  *
- * Leitura de QR Code pela câmera + busca manual por nome.
+ * Leitura automática de QR Code via câmera (html5-qrcode) + busca manual por nome.
  * Validação server-side via transação (previne duplicidade).
  * Responsivo para uso no celular no dia do evento.
  */
@@ -27,28 +27,29 @@ export default function AdminCheckInPage() {
 	const [searchResults, setSearchResults] = useState<Array<{ id: string; fullName: string; invitationDisplayName: string; checkedIn: boolean }>>([]);
 	const [isSearching, setIsSearching] = useState(false);
 	const [cameraError, setCameraError] = useState('');
+	const [scannerReady, setScannerReady] = useState(false);
 
-	const videoRef = useRef<HTMLVideoElement>(null);
-	const streamRef = useRef<MediaStream | null>(null);
-	const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+	const scannerRef = useRef<HTMLDivElement>(null);
+	const html5QrCodeRef = useRef<unknown>(null);
 
 	const eventId = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
 
-	// Parar câmera ao desmontar
+	// Limpar scanner ao desmontar
 	useEffect(() => {
 		return () => {
-			stopCamera();
+			stopScanner();
 		};
 	}, []);
 
-	function stopCamera() {
-		if (scanIntervalRef.current) {
-			clearInterval(scanIntervalRef.current);
-			scanIntervalRef.current = null;
-		}
-		if (streamRef.current) {
-			streamRef.current.getTracks().forEach(track => track.stop());
-			streamRef.current = null;
+	async function stopScanner() {
+		try {
+			if (html5QrCodeRef.current) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				await (html5QrCodeRef.current as any).stop().catch(() => {});
+				html5QrCodeRef.current = null;
+			}
+		} catch {
+			// Ignorar erros de cleanup
 		}
 	}
 
@@ -58,19 +59,37 @@ export default function AdminCheckInPage() {
 		setResult({});
 
 		try {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-			});
-			streamRef.current = stream;
-			if (videoRef.current) {
-				videoRef.current.srcObject = stream;
+			const { Html5Qrcode } = await import('html5-qrcode');
+
+			if (!scannerRef.current) {
+				setCameraError('Elemento do scanner não encontrado.');
+				setStatus('error');
+				return;
 			}
 
-			// Nota: Leitura real de QR Code requer biblioteca como html5-qrcode ou zxing.
-			// Aqui preparamos a estrutura de câmera e o fluxo de validação server-side.
-			// A integração com leitor de QR será adicionada quando a biblioteca for instalada.
-			setStatus('idle');
-			setCameraError('Câmera ativa. Aponte para o QR Code e use o campo abaixo para inserir o token manualmente se a leitura automática não estiver disponível.');
+			const scanner = new Html5Qrcode('qr-scanner-container');
+			html5QrCodeRef.current = scanner;
+
+			await scanner.start(
+				{ facingMode: 'environment' },
+				{
+					fps: 10,
+					qrbox: { width: 250, height: 250 },
+					aspectRatio: 1.0,
+				},
+				async (decodedText) => {
+					// QR Code lido com sucesso — parar scanner e validar
+					await stopScanner();
+					setScannerReady(false);
+					handleManualTokenSubmit(decodedText);
+				},
+				() => {
+					// Callback de erro de scan (chamado a cada frame sem QR detectado)
+					// Ignorar — é comportamento normal durante a busca
+				},
+			);
+
+			setScannerReady(true);
 		} catch (e) {
 			setStatus('error');
 			setCameraError(
@@ -124,7 +143,6 @@ export default function AdminCheckInPage() {
 		if (response.success && response.data?.success) {
 			setStatus('success');
 			setResult(response.data);
-			// Atualizar lista de busca para refletir check-in
 			setSearchResults(prev => prev.map(g => g.id === guestId ? { ...g, checkedIn: true } : g));
 		} else if (response.data?.alreadyCheckedIn) {
 			setStatus('duplicate');
@@ -141,6 +159,7 @@ export default function AdminCheckInPage() {
 		setSearchTerm('');
 		setSearchResults([]);
 		setCameraError('');
+		setScannerReady(false);
 	}
 
 	return (
@@ -214,16 +233,10 @@ export default function AdminCheckInPage() {
 			{/* Seção de câmera e token manual */}
 			{(status === 'idle' || status === 'scanning') && (
 				<div className="space-y-space-lg">
-					{/* Câmera */}
+					{/* Scanner de QR Code */}
 					<div className="overflow-hidden rounded-xl border border-outline-variant/20 bg-black shadow-md">
-						{status === 'scanning' && !cameraError ? (
-							<video
-								ref={videoRef}
-								autoPlay
-								playsInline
-								muted
-								className="aspect-video w-full object-cover"
-							/>
+						{status === 'scanning' ? (
+							<div id="qr-scanner-container" ref={scannerRef} className="w-full" />
 						) : (
 							<div className="flex aspect-video flex-col items-center justify-center bg-surface-container-high p-space-lg text-center">
 								<QrCode size={64} className="mb-space-md text-on-surface-variant/30" />
@@ -343,7 +356,7 @@ export default function AdminCheckInPage() {
 
 				{searchTerm.length >= 2 && searchResults.length === 0 && !isSearching && (
 					<p className="mt-space-md text-center text-body-sm text-on-surface-variant">
-						Nenhum convidado encontrado para "{searchTerm}"
+						Nenhum convidado encontrado para &quot;{searchTerm}&quot;
 					</p>
 				)}
 			</div>
