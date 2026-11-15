@@ -16,7 +16,7 @@ export function Hero() {
 	};
 
 	return (
- <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
+ <section id="inicio" className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
  {/* Background image com overlay */}
  <div data-hero-image className="absolute inset-0 z-0">
  <Image
