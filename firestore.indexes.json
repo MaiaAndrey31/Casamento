@@ -1,0 +1,53 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tokenHash", "order": "ASCENDING" },
+        { "fieldPath": "invitationStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "checkInTokenHash", "order": "ASCENDING" },
+        { "fieldPath": "invitationStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "invitationId", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "fullName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checkins",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "guestId", "order": "ASCENDING" },
+        { "fieldPath": "invitationId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "authorName", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
