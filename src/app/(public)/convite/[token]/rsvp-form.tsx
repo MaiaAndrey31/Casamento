@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CheckCircle, XCircle, Plus, Trash2, Music, MessageSquareHeart, UtensilsCrossed } from 'lucide-react';
+import { CheckCircle, XCircle, Plus, Trash2, Music, MessageSquareHeart, UtensilsCrossed, Users } from 'lucide-react';
 import { rsvpFormSchema } from '@/lib/validators/rsvp.schema';
 import { submitRsvpAction } from '@/app/actions/submit-rsvp.action';
 import { DigitalCard } from './digital-card';
@@ -34,11 +34,17 @@ type RSVPFormData = {
  * Permite confirmar presença, adicionar acompanhantes (dentro do limite),
  * informar restrições alimentares, sugerir música e deixar mensagem pessoal.
  * Após sucesso, exibe o cartão digital com QR Code.
+ *
+ * SEÇÃO DE ACOMPANHANTES:
+ * - Se maxCompanions > 0: exibe seletor numérico de quantos irão + campos dinâmicos
+ * - Se maxCompanions = 0: não exibe seção de acompanhantes
+ * - Limite validado no frontend E no servidor (Server Action)
  */
 export function RsvpForm({ invitationId, eventId, displayName, maxCompanions, guests }: RsvpFormProps) {
 	const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 	const [errorMessage, setErrorMessage] = useState('');
 	const [checkInToken, setCheckInToken] = useState('');
+	const [companionCount, setCompanionCount] = useState(0);
 
 	const form = useForm<RSVPFormData>({
  // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,13 +61,30 @@ export function RsvpForm({ invitationId, eventId, displayName, maxCompanions, gu
  },
 	});
 
-	const { fields, append, remove } = useFieldArray({
+	const { fields, append, remove, replace } = useFieldArray({
  control: form.control,
  name: 'companions',
 	});
 
-	const canAddCompanion = fields.length < maxCompanions;
 	const attendanceStatus = form.watch('attendanceStatus');
+
+	// Sincronizar campos de acompanhantes quando o usuário altera o seletor numérico
+	useEffect(() => {
+ if (companionCount > fields.length) {
+ // Adicionar campos vazios até atingir a quantidade selecionada
+ for (let i = fields.length; i < companionCount; i++) {
+ append({ name: '', isMinor: false });
+ }
+ } else if (companionCount < fields.length) {
+ // Remover campos excedentes (do final)
+ const newCompanions = fields.slice(0, companionCount).map(f => ({
+ name: f.name || '',
+ isMinor: f.isMinor || false,
+ age: f.age,
+ }));
+ replace(newCompanions);
+ }
+	}, [companionCount, fields.length, append, replace]);
 
 	async function onSubmit(data: RSVPFormData) {
  setSubmitStatus('loading');
@@ -89,7 +112,7 @@ export function RsvpForm({ invitationId, eventId, displayName, maxCompanions, gu
  attendanceStatus={form.getValues('attendanceStatus')}
  confirmedGuests={[
  form.getValues('fullName'),
- ...form.getValues('companions').map(c => c.name),
+ ...form.getValues('companions').filter(c => c.name.trim()).map(c => c.name),
  ]}
  checkInToken={checkInToken}
  />
@@ -118,7 +141,11 @@ export function RsvpForm({ invitationId, eventId, displayName, maxCompanions, gu
  </button>
  <button
  type="button"
- onClick={() => form.setValue('attendanceStatus', 'declined', { shouldValidate: true })}
+ onClick={() => {
+ form.setValue('attendanceStatus', 'declined', { shouldValidate: true });
+ setCompanionCount(0);
+ replace([]);
+ }}
  className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-4 text-body-md font-medium transition-all ${
  attendanceStatus === 'declined'
  ? 'border-error bg-error-container text-on-error-container shadow-md'
@@ -150,44 +177,93 @@ export function RsvpForm({ invitationId, eventId, displayName, maxCompanions, gu
  className="w-full rounded-md border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 text-body-md text-on-surface placeholder:text-on-surface-variant/50 focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim transition-colors"
  />
  {form.formState.errors.phone && (
- <p className="mt-space-xs text-body-sm text-error">{form.formState.errors.phone.message}</p>
+ <p className="mt-space-xs text-body-sm text-error">{String(form.formState.errors.phone.message)}</p>
  )}
  </div>
 
- {/* Acompanhantes */}
+ {/* ================================================================
+ SEÇÃO DE ACOMPANHANTES — "Quem estará com você?"
+ Exibida apenas quando maxCompanions > 0.
+ Seletor numérico + campos dinâmicos numerados.
+ ================================================================ */}
  {maxCompanions > 0 && (
+ <div className="rounded-xl border border-[#17291F]/10 bg-[#f6ece1]/30 p-5">
+ <div className="mb-4 flex items-center gap-3">
+ <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#17291F]/5">
+ <Users size={20} className="text-[#17291F]" />
+ </div>
  <div>
- <label className="mb-space-sm block text-label-md uppercase tracking-widest text-on-surface-variant">
- Acompanhantes ({fields.length}/{maxCompanions})
+ <h3 className="text-title-md text-[#17291F]">Quem estará com você?</h3>
+ <p className="text-body-sm text-on-surface-variant">
+ Selecione quantos acompanhantes irão comparecer
+ </p>
+ </div>
+ </div>
+
+ {/* Seletor numérico de acompanhantes */}
+ <div className="mb-4">
+ <label htmlFor="companionCount" className="mb-space-xs block text-label-md uppercase tracking-widest text-on-surface-variant">
+ Acompanhantes que irão ({companionCount} de {maxCompanions})
  </label>
- <div className="space-y-space-sm">
+ <select
+ id="companionCount"
+ value={companionCount}
+ onChange={(e) => setCompanionCount(Number(e.target.value))}
+ className="w-full rounded-md border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 text-body-md text-on-surface focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim transition-colors"
+ >
+ {Array.from({ length: maxCompanions + 1 }, (_, i) => (
+ <option key={i} value={i}>
+ {i === 0 ? 'Nenhum acompanhante' : `${i} acompanhante${i > 1 ? 's' : ''}`}
+ </option>
+ ))}
+ </select>
+ </div>
+
+ {/* Campos dinâmicos para cada acompanhante selecionado */}
  {fields.map((field, index) => (
- <div key={field.id} className="flex items-center gap-2">
+ <div key={field.id} className="mb-3">
+ <label
+ htmlFor={`companion-${index}`}
+ className="mb-1 block text-label-sm uppercase tracking-widest text-on-surface-variant"
+ >
+ Acompanhante {index + 1} — Nome completo *
+ </label>
+ <div className="flex items-center gap-2">
  <input
+ id={`companion-${index}`}
  type="text"
  placeholder={`Nome do acompanhante ${index + 1}`}
- {...form.register(`companions.${index}.name`)}
+ {...form.register(`companions.${index}.name`, {
+ required: 'Nome do acompanhante é obrigatório',
+ })}
  className="flex-1 rounded-md border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 text-body-md text-on-surface placeholder:text-on-surface-variant/50 focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim transition-colors"
  />
  <button
  type="button"
- onClick={() => remove(index)}
+ onClick={() => {
+ remove(index);
+ setCompanionCount(prev => Math.max(0, prev - 1));
+ }}
  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-error/30 text-error transition-colors hover:bg-error-container/30"
- aria-label="Remover acompanhante"
+ aria-label={`Remover acompanhante ${index + 1}`}
  >
  <Trash2 size={16} />
  </button>
  </div>
- ))}
+ {form.formState.errors.companions?.[index]?.name && (
+ <p className="mt-1 text-body-sm text-error">
+ {String(form.formState.errors.companions[index]?.name?.message)}
+ </p>
+ )}
  </div>
- {canAddCompanion && (
- <button
- type="button"
- onClick={() => append({ name: '', isMinor: false })}
- className="mt-space-sm inline-flex items-center gap-2 text-label-md uppercase tracking-widest text-primary underline decoration-tertiary-fixed-dim underline-offset-4 transition-colors hover:text-secondary"
- >
- <Plus size={14} /> Adicionar acompanhante
- </button>
+ ))}
+
+ {/* Feedback de vagas disponíveis */}
+ {companionCount < maxCompanions && (
+ <p className="mt-2 text-body-sm italic text-on-surface-variant">
+ Ainda é possível adicionar {maxCompanions - companionCount} acompanhante
+ {maxCompanions - companionCount > 1 ? 's' : ''}.
+ </p>
  )}
  </div>
  )}

@@ -43,7 +43,43 @@ export async function submitRsvpAction(
 		};
 	}
 
-	// 3. Persistência via transação (controle de concorrência)
+	// 3. Validar limite de acompanhantes NO SERVIDOR (segurança contra manipulação frontend)
+	try {
+		const { adminDb } = await import('@/lib/firebase/admin');
+
+		const invitationDoc = await adminDb
+			.collection('events')
+			.doc(eventId)
+			.collection('invitations')
+			.doc(formData.invitationId)
+			.get();
+
+		if (!invitationDoc.exists) {
+			return {
+				success: false,
+				error: 'Convite não encontrado. Verifique o link ou entre em contato com os noivos.',
+			};
+		}
+
+		const invitationData = invitationDoc.data();
+		const maxCompanions = invitationData?.maxCompanions ?? 0;
+		const companionsCount = validation.data.companions.filter(c => c.name.trim()).length;
+
+		if (companionsCount > maxCompanions) {
+			return {
+				success: false,
+				error: `Limite de acompanhantes excedido. Seu convite permite ${maxCompanions} acompanhante${maxCompanions !== 1 ? 's' : ''}, mas foram informados ${companionsCount}.`,
+			};
+		}
+	} catch (e) {
+		console.error('[SubmitRSVP] Falha ao validar limite de acompanhantes:', e);
+		return {
+			success: false,
+			error: 'Erro ao validar convite. Tente novamente.',
+		};
+	}
+
+	// 4. Persistência via transação (controle de concorrência)
 	const result = await submitRSVP(eventId, formData.invitationId, {
 		attendanceStatus: validation.data.attendanceStatus,
 		confirmedGuestIds: [],
