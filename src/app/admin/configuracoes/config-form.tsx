@@ -56,6 +56,7 @@ export function ConfigForm({ event }: ConfigFormProps) {
  receptionTime: event?.receptionTime || '',
  venueName: event?.venueName || '',
  venueAddress: event?.venueAddress || '',
+ // Nota: venueName é opcional; venueAddress é a informação principal para espaços particulares
  mapsUrl: event?.mapsUrl || '',
  wazeUrl: event?.wazeUrl || '',
  dressCode: event?.dressCode || '',
@@ -160,12 +161,12 @@ export function ConfigForm({ event }: ConfigFormProps) {
  <div className="space-y-space-md">
  <div>
  <label htmlFor="venueName" className="mb-space-xs block text-label-md uppercase tracking-widest text-on-surface-variant">
- Nome do Local
+ Nome ou identificação do espaço (opcional)
  </label>
  <input
  id="venueName"
  type="text"
- placeholder="Ex: Villa Casagrande"
+ placeholder="Ex.: Espaço particular, residência, sítio..."
  {...form.register('venueName')}
  className="w-full rounded-md border border-outline-variant/30 bg-surface-container-low px-4 py-3 text-body-md text-on-surface placeholder:text-on-surface-variant/50 focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim transition-colors"
  />

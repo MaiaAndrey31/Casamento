@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
-import { Heart, Calendar, MapPin, Users, CheckCircle, Clock } from 'lucide-react';
+import { Heart, Calendar, MapPin, Users, CheckCircle, Clock, Navigation } from 'lucide-react';
 import { validateInvitation, type InvitationViewData } from '@/app/actions/validate-invitation.action';
 import { WEDDING_CONFIG, getAssetPath } from '@/config/wedding';
+import { getEventById } from '@/lib/repositories/event.repository';
 import { RsvpForm } from './rsvp-form';
 
 /**
@@ -35,6 +36,35 @@ export default async function InvitationPage({ params }: PageProps) {
 	}
 
 	const { invitation, guests } = result.data;
+
+	// Carregar dados do evento do Firestore (sobrescreve WEDDING_CONFIG estático)
+	// Isso garante que alterações no painel admin reflitam imediatamente no convite
+	const eventData = await getEventById(eventId);
+
+	// Mesclar configurações: Firestore tem prioridade sobre valores estáticos
+	const config = {
+		...WEDDING_CONFIG,
+		venueName: eventData?.venueName || WEDDING_CONFIG.venueName,
+		venueAddress: eventData?.venueAddress || WEDDING_CONFIG.venueAddress,
+		mapsUrl: eventData?.mapsUrl || WEDDING_CONFIG.mapsUrl,
+		wazeUrl: eventData?.wazeUrl || WEDDING_CONFIG.wazeUrl,
+		eventDate: eventData?.eventDate || WEDDING_CONFIG.eventDate,
+		ceremonyTime: eventData?.ceremonyTime || WEDDING_CONFIG.ceremonyTime,
+		timezone: eventData?.timezone || WEDDING_CONFIG.timezone,
+		rsvpDeadline: eventData?.rsvpDeadline || WEDDING_CONFIG.rsvpDeadline,
+		heroMessage: eventData?.heroMessage || WEDDING_CONFIG.heroMessage,
+		heroVerseReference: eventData?.heroVerseReference || WEDDING_CONFIG.heroVerseReference,
+		closingMessage: eventData?.closingMessage || WEDDING_CONFIG.closingMessage,
+		closingVerseReference: eventData?.closingVerseReference || WEDDING_CONFIG.closingVerseReference,
+	};
+
+	// Construir links de navegação fallback a partir do endereço quando URLs não estão configuradas
+	const encodedAddress = config.venueAddress ? encodeURIComponent(config.venueAddress) : null;
+	const fallbackMapsUrl = encodedAddress ? `https://www.google.com/maps/search/?api=1&query=${encodedAddress}` : null;
+	const fallbackWazeUrl = encodedAddress ? `https://waze.com/ul?q=${encodedAddress}&navigate=yes` : null;
+	const effectiveMapsUrl = config.mapsUrl || fallbackMapsUrl;
+	const effectiveWazeUrl = config.wazeUrl || fallbackWazeUrl;
+	const hasVenueInfo = !!(config.venueName || config.venueAddress);
 
 	// Calcular total de pessoas autorizadas (titulares + acompanhantes)
 	// A action validateInvitation já filtra apenas convidados ativos
@@ -87,7 +117,7 @@ export default async function InvitationPage({ params }: PageProps) {
 
 					{/* Título principal */}
 					<h1 className="mb-6 text-display-hero-mobile text-white drop-shadow-lg md:text-display-hero">
-						{WEDDING_CONFIG.coupleNames}
+						{config.coupleNames}
 					</h1>
 
 					{/* Mensagem personalizada ao convidado */}
@@ -100,11 +130,11 @@ export default async function InvitationPage({ params }: PageProps) {
 					{/* Frase sobre Deus e a história do casal */}
 					<div className="mx-auto max-w-lg rounded-xl border border-white/10 bg-white/5 px-6 py-4 backdrop-blur-sm">
 						<p className="text-body-md leading-relaxed text-white/85">
-							&ldquo;{WEDDING_CONFIG.heroMessage}&rdquo;
+							&ldquo;{config.heroMessage}&rdquo;
 						</p>
-						{WEDDING_CONFIG.heroVerseReference && (
+						{config.heroVerseReference && (
 							<p className="mt-2 text-label-sm uppercase tracking-widest text-[#e4c286]/80">
-								{WEDDING_CONFIG.heroVerseReference}
+								{config.heroVerseReference}
 							</p>
 						)}
 					</div>
@@ -155,19 +185,19 @@ export default async function InvitationPage({ params }: PageProps) {
 								</div>
 								<h3 className="text-headline-sm text-white">Data</h3>
 							</div>
-							{WEDDING_CONFIG.eventDate ? (
+							{config.eventDate ? (
 								<div>
 									<p className="text-title-md text-[#ffdea5]">
-										{new Date(WEDDING_CONFIG.eventDate).toLocaleDateString('pt-BR', {
+										{new Date(config.eventDate).toLocaleDateString('pt-BR', {
 											day: 'numeric',
 											month: 'long',
 											year: 'numeric',
-											timeZone: WEDDING_CONFIG.timezone,
+											timeZone: config.timezone,
 										})}
 									</p>
 									<div className="mt-3 flex items-center gap-2 text-body-md text-white/70">
 										<Clock size={16} className="text-[#e4c286]/60" />
-										<span>às {WEDDING_CONFIG.ceremonyTime}</span>
+										<span>às {config.ceremonyTime}</span>
 									</div>
 								</div>
 							) : (
@@ -183,35 +213,37 @@ export default async function InvitationPage({ params }: PageProps) {
 								</div>
 								<h3 className="text-headline-sm text-white">Local</h3>
 							</div>
-							{WEDDING_CONFIG.venueName ? (
+							{hasVenueInfo ? (
 								<div>
-									<p className="text-title-md text-[#ffdea5]">{WEDDING_CONFIG.venueName}</p>
-									{WEDDING_CONFIG.venueAddress && (
-										<p className="mt-2 text-body-sm leading-relaxed text-white/60">
-											{WEDDING_CONFIG.venueAddress}
+									{config.venueName && (
+										<p className="text-title-md text-[#ffdea5]">{config.venueName}</p>
+									)}
+									{config.venueAddress && (
+										<p className={`text-body-sm leading-relaxed text-white/70 whitespace-pre-line ${config.venueName ? 'mt-2' : ''}`}>
+											{config.venueAddress}
 										</p>
 									)}
-									{/* Botões de localização */}
-									{(WEDDING_CONFIG.mapsUrl || WEDDING_CONFIG.wazeUrl) && (
+									{/* Botões de navegação — URLs cadastradas ou fallback pelo endereço */}
+									{(effectiveMapsUrl || effectiveWazeUrl) && (
 										<div className="mt-4 flex flex-wrap gap-2">
-											{WEDDING_CONFIG.mapsUrl && (
+											{effectiveMapsUrl && (
 												<a
-													href={WEDDING_CONFIG.mapsUrl}
+													href={effectiveMapsUrl}
 													target="_blank"
 													rel="noopener noreferrer"
 													className="inline-flex items-center gap-1.5 rounded-md border border-[#e4c286]/30 bg-[#e4c286]/10 px-3 py-1.5 text-label-sm uppercase tracking-widest text-[#e4c286] transition-colors hover:bg-[#e4c286]/20"
 												>
-													<MapPin size={12} /> Google Maps
+													<MapPin size={12} /> Ver no Google Maps
 												</a>
 											)}
-											{WEDDING_CONFIG.wazeUrl && (
+											{effectiveWazeUrl && (
 												<a
-													href={WEDDING_CONFIG.wazeUrl}
+													href={effectiveWazeUrl}
 													target="_blank"
 													rel="noopener noreferrer"
 													className="inline-flex items-center gap-1.5 rounded-md border border-[#e4c286]/30 bg-[#e4c286]/10 px-3 py-1.5 text-label-sm uppercase tracking-widest text-[#e4c286] transition-colors hover:bg-[#e4c286]/20"
 												>
-													Waze
+													<Navigation size={12} /> Abrir no Waze
 												</a>
 											)}
 										</div>
@@ -302,14 +334,14 @@ export default async function InvitationPage({ params }: PageProps) {
 							<p className="mt-2 text-body-md text-[#434843]">
 								Preencha os dados abaixo para confirmar sua presença neste dia tão especial.
 							</p>
-							{WEDDING_CONFIG.rsvpDeadline && (
+							{config.rsvpDeadline && (
 								<p className="mt-2 text-label-sm uppercase tracking-widest text-[#a2854f]">
 									Confirme até{' '}
-									{new Date(WEDDING_CONFIG.rsvpDeadline).toLocaleDateString('pt-BR', {
+									{new Date(config.rsvpDeadline).toLocaleDateString('pt-BR', {
 										day: 'numeric',
 										month: 'long',
 										year: 'numeric',
-										timeZone: WEDDING_CONFIG.timezone,
+										timeZone: config.timezone,
 									})}
 								</p>
 							)}
@@ -349,18 +381,18 @@ export default async function InvitationPage({ params }: PageProps) {
 					</div>
 
 					<p className="text-headline-sm leading-relaxed text-white/90 md:text-headline-md">
-						&ldquo;{WEDDING_CONFIG.closingMessage}&rdquo;
+						&ldquo;{config.closingMessage}&rdquo;
 					</p>
-					{WEDDING_CONFIG.closingVerseReference && (
+					{config.closingVerseReference && (
 						<p className="mt-3 text-label-md uppercase tracking-[0.15em] text-[#e4c286]/70">
-							{WEDDING_CONFIG.closingVerseReference}
+							{config.closingVerseReference}
 						</p>
 					)}
 
 					<div className="mx-auto mt-8 h-px w-16 bg-gradient-to-r from-transparent via-[#e4c286]/40 to-transparent" />
 
 					<p className="mt-6 text-body-sm italic text-white/50">
-						{WEDDING_CONFIG.closingSignature}
+						{config.closingSignature}
 					</p>
 
 					{/* Link para história completa */}

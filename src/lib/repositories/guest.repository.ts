@@ -178,6 +178,7 @@ export async function createGuest(
  category: data.category,
  invitationId: data.invitationId || null,
  isPrimaryGuest: data.isPrimaryGuest ?? true,
+ maxCompanions: data.maxCompanions ?? 0,
  active: true,
  createdAt: FieldValue.serverTimestamp(),
  updatedAt: FieldValue.serverTimestamp(),
@@ -218,6 +219,7 @@ export async function updateGuest(
  if (data.phone !== undefined) updateData.phone = data.phone.trim();
  if (data.category !== undefined) updateData.category = data.category;
  if (data.isPrimaryGuest !== undefined) updateData.isPrimaryGuest = data.isPrimaryGuest;
+ if ((data as any).maxCompanions !== undefined) updateData.maxCompanions = (data as any).maxCompanions;
 
  await adminDb
  .collection('events')

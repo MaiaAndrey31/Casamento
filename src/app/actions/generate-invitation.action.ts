@@ -109,6 +109,10 @@ export async function generateInvitationAction(
 
 			const guestData = guestDoc.data();
 
+			// Usar maxCompanions do formulário se enviado; caso contrário, usar o valor persistido no convidado
+			// Isso garante que a primeira geração funcione mesmo que o formulário não reenvie o campo
+			const effectiveMaxCompanions = validation.data.maxCompanions || guestData?.maxCompanions || 0;
+
 			// Leitura 2: verificar se já possui convite ativo (dentro da transação = seguro contra concorrência)
 			if (guestData?.invitationId) {
 				const existingInvitationDoc = await transaction.get(
@@ -129,7 +133,7 @@ export async function generateInvitationAction(
 			transaction.set(newInvitationRef, {
 				eventId,
 				displayName: validation.data.displayName,
-				maxCompanions: validation.data.maxCompanions,
+				maxCompanions: effectiveMaxCompanions,
 				category: validation.data.category,
 				guestIds: [validation.data.guestId],
 				invitationStatus: 'active',
