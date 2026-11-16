@@ -3,9 +3,13 @@
  *
  * Todas as operações são server-side via Admin SDK.
  * Usa transações para controle de concorrência (campo `revision`).
+ *
+ * SERIALIZAÇÃO: getRSVP usa serializeFirestoreValue() para converter Timestamps
+ * antes de retornar dados para Server/Client Components.
  */
 
 import type { RSVP, AttendanceStatus, CompanionInfo } from '@/types';
+import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
 
 const RSVPS_SUBCOLLECTION = 'rsvps';
 
@@ -68,6 +72,7 @@ export async function submitRSVP(
 /**
  * Recupera o RSVP existente para um convite.
  * Retorna null se não houver confirmação prévia.
+ * Serializa documento bruto do Firestore Admin SDK para objeto seguro.
  */
 export async function getRSVP(
 	eventId: string,
@@ -85,7 +90,8 @@ export async function getRSVP(
 
 		if (!doc.exists) return null;
 
-		return { id: doc.id, ...doc.data() } as RSVP;
+		// Serializar documento bruto do Firestore Admin SDK para objeto seguro
+		return { id: doc.id, ...(serializeFirestoreValue(doc.data(), `rsvp.${invitationId}`) as Record<string, unknown>) } as RSVP;
 	} catch {
 		return null;
 	}

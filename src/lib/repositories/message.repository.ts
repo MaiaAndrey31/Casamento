@@ -3,9 +3,13 @@
  *
  * Operações públicas (criação) usam Client SDK com validação server-side via Server Action.
  * Operações administrativas (moderação, listagem completa) usam Admin SDK.
+ *
+ * SERIALIZAÇÃO: getApprovedMessages usa Client SDK (dados já serializáveis).
+ * Funções admin que retornam dados para Client Components devem usar serializeFirestoreValue().
  */
 
 import type { Message, ModerationStatus } from '@/types';
+import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
 
 const MESSAGES_SUBCOLLECTION = 'messages';
 
@@ -59,6 +63,7 @@ export async function createMessage(
 /**
  * Lista mensagens aprovadas para exibição pública.
  * Leitura pública permitida pelas Security Rules.
+ * Usa Client SDK — dados já são serializáveis por React Server Components.
  */
 export async function getApprovedMessages(
 	eventId: string,
@@ -90,6 +95,35 @@ export async function getApprovedMessages(
  })) as Message[];
 	} catch (e) {
  console.warn('[MessageRepository] Falha ao listar mensagens aprovadas:', e);
+ return [];
+	}
+}
+
+/**
+ * Lista todas as mensagens para moderação (admin only).
+ * Retorna dados serializados para uso seguro em Client Components.
+ */
+export async function getAllMessagesForModeration(
+	eventId: string,
+): Promise<Message[]> {
+	try {
+ const { adminDb } = await import('@/lib/firebase/admin');
+
+ const snapshot = await adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection(MESSAGES_SUBCOLLECTION)
+ .orderBy('createdAt', 'desc')
+ .limit(200)
+ .get();
+
+ return snapshot.docs.map(doc => ({
+ id: doc.id,
+ eventId,
+ ...(serializeFirestoreValue(doc.data(), `message.${doc.id}`) as Record<string, unknown>),
+ })) as Message[];
+	} catch (e) {
+ console.error('[MessageRepository] Falha ao listar mensagens para moderação:', e);
  return [];
 	}
 }

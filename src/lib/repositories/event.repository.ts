@@ -3,9 +3,14 @@
  *
  * Utiliza Firebase Admin SDK quando disponível (server-side).
  * Fallback para Client SDK em leitura pública quando Admin não está configurado.
+ *
+ * SERIALIZAÇÃO: Todos os retornos passam por toEventSettingsDTO() para garantir
+ * que objetos Firestore Timestamp sejam convertidos em strings ISO 8601 antes
+ * de atravessar a fronteira Server Component → Client Component.
  */
 
 import type { WeddingEvent } from '@/types';
+import { toEventSettingsDTO } from '@/lib/server/dto';
 
 const EVENT_COLLECTION = 'events';
 
@@ -26,9 +31,10 @@ export async function getActiveEvent(): Promise<WeddingEvent | null> {
 		if (snapshot.empty) return null;
 
 		const doc = snapshot.docs[0];
-		return { id: doc.id, ...doc.data() } as WeddingEvent;
+		// Serializar documento bruto do Firestore Admin SDK para DTO seguro
+		const data = doc.data(); if (!data) return null; return toEventSettingsDTO(doc.id, data) as unknown as WeddingEvent;
 	} catch {
-		// Fallback para Client SDK (leitura pública)
+		// Fallback para Client SDK (leitura pública) — dados já são serializáveis
 		try {
 			const { db } = await import('@/lib/firebase/client');
 			const { query, collection, where, limit, getDocs } = await import('firebase/firestore');
@@ -61,7 +67,8 @@ export async function getEventById(eventId: string): Promise<WeddingEvent | null
 
 		if (!doc.exists) return null;
 
-		return { id: doc.id, ...doc.data() } as WeddingEvent;
+		// Serializar documento bruto do Firestore Admin SDK para DTO seguro
+		const data = doc.data(); if (!data) return null; return toEventSettingsDTO(doc.id, data) as unknown as WeddingEvent;
 	} catch {
 		try {
 			const { db } = await import('@/lib/firebase/client');
@@ -72,7 +79,7 @@ export async function getEventById(eventId: string): Promise<WeddingEvent | null
 
 			if (!snapshot.exists()) return null;
 
-			return { id: snapshot.id, ...snapshot.data() } as WeddingEvent;
+			const data = snapshot.data(); return data ? ({ id: snapshot.id, ...data } as WeddingEvent) : null;
 		} catch {
 			return null;
 		}
