@@ -4,7 +4,9 @@ import { Heart, Calendar, MapPin, Users, CheckCircle, Clock, Navigation } from '
 import { validateInvitation, type InvitationViewData } from '@/app/actions/validate-invitation.action';
 import { WEDDING_CONFIG, getAssetPath } from '@/config/wedding';
 import { getEventById } from '@/lib/repositories/event.repository';
+import { getRSVP } from '@/lib/repositories/rsvp.repository';
 import { RsvpForm } from './rsvp-form';
+import { RsvpConfirmedView } from './rsvp-confirmed-view';
 
 /**
  * Página de Convite Personalizado — /convite/[token]
@@ -65,6 +67,16 @@ export default async function InvitationPage({ params }: PageProps) {
 	const effectiveMapsUrl = config.mapsUrl || fallbackMapsUrl;
 	const effectiveWazeUrl = config.wazeUrl || fallbackWazeUrl;
 	const hasVenueInfo = !!(config.venueName || config.venueAddress);
+
+	// Consultar RSVP existente no Firestore para determinar o estado do convite
+	// Isso garante que convidados que já confirmaram vejam a vista de confirmação
+	// em vez do formulário, mesmo após fechar e reabrir o link
+	const existingRsvp = await getRSVP(eventId, invitation.id);
+
+	// Determinar se alteração é permitida: apenas se RSVP existe e prazo não expirou
+	const rsvpDeadlineDate = config.rsvpDeadline ? new Date(config.rsvpDeadline) : null;
+	const isPastDeadline = rsvpDeadlineDate ? rsvpDeadlineDate < new Date() : false;
+	const canEditRsvp = !!existingRsvp && !isPastDeadline;
 
 	// Calcular total de pessoas autorizadas (titulares + acompanhantes)
 	// A action validateInvitation já filtra apenas convidados ativos
@@ -347,13 +359,31 @@ export default async function InvitationPage({ params }: PageProps) {
 							)}
 						</div>
 
-						<RsvpForm
-							invitationId={invitation.id}
-							eventId={eventId}
-							displayName={invitation.displayName}
-							maxCompanions={invitation.maxCompanions}
-							guests={guests}
-						/>
+						{existingRsvp ? (
+							/* ESTADO B/C: RSVP já existe — mostrar vista de confirmação/recusa */
+							<RsvpConfirmedView
+								rsvp={existingRsvp}
+								displayName={invitation.displayName}
+								eventDate={config.eventDate}
+								ceremonyTime={config.ceremonyTime}
+								timezone={config.timezone || 'America/Sao_Paulo'}
+								venueName={config.venueName}
+								venueAddress={config.venueAddress}
+								mapsUrl={config.mapsUrl}
+								wazeUrl={config.wazeUrl}
+								dressCode={config.dressCode}
+								canEdit={canEditRsvp}
+							/>
+						) : (
+							/* ESTADO A: Sem RSVP — mostrar formulário de confirmação */
+							<RsvpForm
+								invitationId={invitation.id}
+								eventId={eventId}
+								displayName={invitation.displayName}
+								maxCompanions={invitation.maxCompanions}
+								guests={guests}
+							/>
+						)}
 					</div>
 				</div>
 			</section>
