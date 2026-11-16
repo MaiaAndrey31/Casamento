@@ -15,8 +15,11 @@ const INVITATIONS_SUBCOLLECTION = 'invitations';
  * Necessário porque Timestamp não é serializável via React Server Components.
  * Sem esta conversão, passar dados do Firestore para componentes 'use client'
  * causa exceção de serialização em produção (digest 3209861381).
+ *
+ * Exportada para uso em páginas server component que passam dados diretamente
+ * para componentes client-side (ex: página de edição de convidados).
  */
-function sanitizeFirestoreData(data: Record<string, unknown>): Record<string, unknown> {
+export function sanitizeFirestoreData(data: Record<string, unknown>): Record<string, unknown> {
 	const result: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(data)) {
  if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {

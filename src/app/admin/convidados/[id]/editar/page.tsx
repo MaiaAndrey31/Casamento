@@ -24,9 +24,11 @@ export default async function AdminEditGuestPage({
 	const eventId = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
 
 	// Carregar dados do convidado via Admin SDK (server-only)
+	// sanitizeFirestoreData converte Timestamp → string ISO para serialização RSC segura
 	let guest: Record<string, unknown> | null = null;
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
+		const { sanitizeFirestoreData } = await import('@/lib/repositories/guest.repository');
 		const doc = await adminDb
 			.collection('events')
 			.doc(eventId)
@@ -35,7 +37,7 @@ export default async function AdminEditGuestPage({
 			.get();
 
 		if (doc.exists) {
-			guest = { id: doc.id, ...doc.data() } as Record<string, unknown>;
+			guest = { id: doc.id, ...sanitizeFirestoreData(doc.data() as Record<string, unknown>) };
 		}
 	} catch (e) {
 		console.error('[EditGuest] Falha ao carregar convidado:', e);
