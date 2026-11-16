@@ -1,18 +1,24 @@
 'use server';
 
 /**
- * Server Action — Gerar Convite para Convidado
+ * Server Action — Gerar Convite para Convidado (TRANSACIONAL)
  *
- * Cria um convite digital personalizado associado a um convidado existente.
- * Retorna o token original APENAS nesta operação (não é armazenado no Firestore).
- * Se o convidado já possui convite ativo, retorna erro orientando regeneração.
+ * Cria um convite digital personalizado associado a um convidado existente
+ * usando uma transação do Firestore para garantir atomicidade:
+ * - Verifica duplicidade DENTRO da transação (previne race conditions)
+ * - Cria convite com tokenHash + encryptedToken em uma única escrita
+ * - Vincula convidado ao convite na mesma transação
+ * - Se qualquer etapa falhar, nenhuma escrita é persistida
  *
- * SEGURANÇA: O token original nunca é persistido. Apenas o hash SHA-256 é armazenado.
+ * SEGURANÇA:
+ * - Token original nunca é persistido em texto puro
+ * - Apenas hash SHA-256 e token criptografado AES-256-GCM são armazenados
+ * - Exige sessão administrativa válida
+ * - Exige INVITATION_ENCRYPTION_KEY configurada ANTES de qualquer escrita
  */
 
 import { revalidatePath } from 'next/cache';
 import { requireAdminSession } from '@/lib/auth/admin-session';
-import { createInvitation } from '@/lib/repositories/invitation.repository';
 import { encryptToken, isEncryptionConfigured } from '@/lib/crypto/invitation-vault';
 import type { ApiResponse } from '@/types';
 import { z } from 'zod';
@@ -62,114 +68,124 @@ export async function generateInvitationAction(
 		};
 	}
 
+	// 4. Verificar criptografia ANTES de qualquer operação de escrita
+	// Se a chave estiver ausente ou inválida, falhar cedo sem criar documentos órfãos
+	const encryptionReady = await isEncryptionConfigured();
+	if (!encryptionReady) {
+		return {
+			success: false,
+			error: 'INVITATION_ENCRYPTION_KEY não configurada. Adicione a variável de ambiente privada na Vercel antes de gerar convites.',
+		};
+	}
+
+	// 5. Preparar token, hash e criptografia ANTES da transação
+	// Operações criptográficas são puras e não devem estar dentro da callback transacional
+	const { adminDb, generateSecureToken, hashToken } = await import('@/lib/firebase/admin');
+	const { FieldValue } = await import('firebase-admin/firestore');
+
+	const token = generateSecureToken();
+	const tokenHash = await hashToken(token);
+	const encryptedToken = await encryptToken(token);
+
 	const eventId = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
+	const guestRef = adminDb
+		.collection('events')
+		.doc(eventId)
+		.collection('guests')
+		.doc(validation.data.guestId);
+	const invitationsRef = adminDb
+		.collection('events')
+		.doc(eventId)
+		.collection('invitations');
 
+	// 6. Executar transação atômica
 	try {
-		const { adminDb } = await import('@/lib/firebase/admin');
-
-		// Verificar se o convidado existe e obter dados
-		const guestDoc = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('guests')
-			.doc(validation.data.guestId)
-			.get();
-
-		if (!guestDoc.exists) {
-			return { success: false, error: 'Convidado não encontrado.' };
-		}
-
-		const guestData = guestDoc.data();
-
-		// Verificar se já possui convite ativo
-		if (guestData?.invitationId) {
-			const existingInvitation = await adminDb
-				.collection('events')
-				.doc(eventId)
-				.collection('invitations')
-				.doc(guestData.invitationId)
-				.get();
-
-			if (existingInvitation.exists && existingInvitation.data()?.invitationStatus === 'active') {
-				return {
-					success: false,
-					error: 'Este convidado já possui um convite ativo. Use a opção "Regenerar convite" se precisar de um novo link.',
-				};
+		const invitationId = await adminDb.runTransaction(async (transaction) => {
+			// Leitura 1: verificar se convidado existe
+			const guestDoc = await transaction.get(guestRef);
+			if (!guestDoc.exists) {
+				throw new Error('GUEST_NOT_FOUND');
 			}
-		}
 
-		// Verificar se criptografia está configurada (necessário para recuperação futura)
-		const encryptionReady = await isEncryptionConfigured();
-		if (!encryptionReady) {
-			return {
-				success: false,
-				error: 'INVITATION_ENCRYPTION_KEY não configurada. Adicione a variável de ambiente privada na Vercel antes de gerar convites.',
-			};
-		}
+			const guestData = guestDoc.data();
 
-		// Criar convite
-		const result = await createInvitation(eventId, {
-			displayName: validation.data.displayName,
-			maxCompanions: validation.data.maxCompanions,
-			category: validation.data.category,
-			guestIds: [validation.data.guestId],
-		});
+			// Leitura 2: verificar se já possui convite ativo (dentro da transação = seguro contra concorrência)
+			if (guestData?.invitationId) {
+				const existingInvitationDoc = await transaction.get(
+					adminDb
+						.collection('events')
+						.doc(eventId)
+						.collection('invitations')
+						.doc(guestData.invitationId),
+				);
 
-		if (!result.success || !result.token || !result.invitationId) {
-			return {
-				success: false,
-				error: result.error || 'Falha ao gerar convite.',
-			};
-		}
+				if (existingInvitationDoc.exists && existingInvitationDoc.data()?.invitationStatus === 'active') {
+					throw new Error('INVITATION_ALREADY_ACTIVE');
+				}
+			}
 
-		// Criptografar token para recuperação futura
-		const encryptedToken = await encryptToken(result.token);
-
-		// Armazenar token criptografado no documento do convite
-		await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('invitations')
-			.doc(result.invitationId)
-			.update({
+			// Escrita 1: criar documento de convite com todos os campos atômicos
+			const newInvitationRef = invitationsRef.doc();
+			transaction.set(newInvitationRef, {
+				eventId,
+				displayName: validation.data.displayName,
+				maxCompanions: validation.data.maxCompanions,
+				category: validation.data.category,
+				guestIds: [validation.data.guestId],
+				invitationStatus: 'active',
+				tokenHash,
 				encryptedToken,
+				tokenExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+				createdAt: FieldValue.serverTimestamp(),
+				updatedAt: FieldValue.serverTimestamp(),
+				createdBy: session.uid,
 			});
 
-		// Associar convite ao convidado
-		await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('guests')
-			.doc(validation.data.guestId)
-			.update({
-				invitationId: result.invitationId,
-				updatedAt: new Date().toISOString(),
+			// Escrita 2: vincular convidado ao convite na mesma transação
+			transaction.update(guestRef, {
+				invitationId: newInvitationRef.id,
+				updatedAt: FieldValue.serverTimestamp(),
 			});
+
+			return newInvitationRef.id;
+		});
 
 		revalidatePath('/admin/convidados');
 
 		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://casamento-amanda-andrey.vercel.app';
-		const inviteUrl = `${baseUrl}/convite/${result.token}`;
+		const inviteUrl = `${baseUrl}/convite/${token}`;
 
-		console.log('[GenerateInvitation] Convite gerado com sucesso.', {
+		console.log('[GenerateInvitation] Convite gerado com sucesso (transacional).', {
 			eventId,
 			guestId: validation.data.guestId,
-			invitationId: result.invitationId,
+			invitationId,
 			createdBy: session.uid,
 		});
 
 		return {
 			success: true,
 			data: {
-				invitationId: result.invitationId,
-				token: result.token,
+				invitationId,
+				token,
 				inviteUrl,
 			},
-			message: 'Convite gerado com sucesso! Copie ou compartilhe o link agora — ele não será exibido novamente.',
+			message: 'Convite gerado com sucesso! Copie ou compartilhe o link agora — ele pode ser recuperado posteriormente pelo painel.',
 		};
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Erro desconhecido';
-		console.error('[GenerateInvitation] Falha ao gerar convite:', message);
+
+		// Erros conhecidos da transação → mensagens amigáveis
+		if (message === 'GUEST_NOT_FOUND') {
+			return { success: false, error: 'Convidado não encontrado.' };
+		}
+		if (message === 'INVITATION_ALREADY_ACTIVE') {
+			return {
+				success: false,
+				error: 'Este convidado já possui um convite ativo. Use a opção "Regenerar link de acesso" se precisar de um novo link.',
+			};
+		}
+
+		console.error('[GenerateInvitation] Falha na transação:', message);
 		return { success: false, error: `Falha ao gerar convite: ${message}` };
 	}
 }
