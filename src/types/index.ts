@@ -66,7 +66,7 @@ export interface Invitation {
   invitationStatus: 'active' | 'revoked' | 'expired';
   tokenHash: string; // SHA-256 do token de acesso (nunca armazenar token em claro)
   tokenExpiresAt: string; // ISO 8601
-  category: 'familia_noiva' | 'familia_noivo' | 'padrinhos' | 'amigos' | 'colegas';
+  category: string; // Valores definidos em src/lib/constants/guest-categories.ts
   createdAt: string;
   updatedAt: string;
 }

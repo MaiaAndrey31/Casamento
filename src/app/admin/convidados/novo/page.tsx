@@ -13,16 +13,7 @@ import { createGuestAction } from '@/app/actions/create-guest.action';
  * via Server Action, preservação de dados em caso de erro e feedback visual.
  */
 
-const CATEGORIES = [
-	{ value: 'familia_noivo', label: 'Família do Noivo' },
-	{ value: 'familia_noiva', label: 'Família da Noiva' },
-	{ value: 'amigos_noivo', label: 'Amigos do Noivo' },
-	{ value: 'amigos_noiva', label: 'Amigos da Noiva' },
-	{ value: 'casal', label: 'Casal (Amigos/Família)' },
-	{ value: 'trabalho', label: 'Trabalho' },
-	{ value: 'igreja', label: 'Igreja / Comunidade' },
-	{ value: 'outros', label: 'Outros' },
-];
+import { GUEST_CATEGORIES } from '@/lib/constants/guest-categories';
 
 export default function AdminNewGuestPage() {
 	const router = useRouter();
@@ -50,6 +41,8 @@ export default function AdminNewGuestPage() {
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		// Proteção contra submissão dupla: desabilita imediatamente antes do await
+		if (isSubmitting) return;
 		setIsSubmitting(true);
 		setError(null);
 		setSuccess(null);
@@ -180,7 +173,7 @@ export default function AdminNewGuestPage() {
 								className="w-full rounded-lg border border-outline-variant/30 bg-surface px-4 py-3 text-body-md text-on-surface focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim transition-colors"
 							>
 								<option value="">Selecione uma categoria</option>
-								{CATEGORIES.map((cat) => (
+								{GUEST_CATEGORIES.map((cat) => (
 									<option key={cat.value} value={cat.value}>
 										{cat.label}
 									</option>

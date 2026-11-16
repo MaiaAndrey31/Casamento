@@ -6,16 +6,7 @@ import Link from 'next/link';
 import { Save, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { updateGuestAction } from '@/app/actions/update-guest.action';
 
-const CATEGORIES = [
-	{ value: 'familia_noivo', label: 'Família do Noivo' },
-	{ value: 'familia_noiva', label: 'Família da Noiva' },
-	{ value: 'amigos_noivo', label: 'Amigos do Noivo' },
-	{ value: 'amigos_noiva', label: 'Amigos da Noiva' },
-	{ value: 'casal', label: 'Casal (Amigos/Família)' },
-	{ value: 'trabalho', label: 'Trabalho' },
-	{ value: 'igreja', label: 'Igreja / Comunidade' },
-	{ value: 'outros', label: 'Outros' },
-];
+import { GUEST_CATEGORIES } from '@/lib/constants/guest-categories';
 
 interface GuestData {
 	id: string;
@@ -41,12 +32,19 @@ export function GuestEditForm({ guest }: { guest: GuestData }) {
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
 
+	// Valida se a categoria do convidado está na fonte única de verdade.
+	// Se não estiver (categoria legada desconhecida), usa string vazia como fallback.
+	const validCategoryValues = GUEST_CATEGORIES.map(c => c.value) as string[];
+	const safeCategory = (guest.category && validCategoryValues.includes(guest.category as string))
+		? guest.category
+		: '';
+
 	const [formData, setFormData] = useState({
 		guestId: guest.id,
 		fullName: guest.fullName || '',
 		phone: guest.phone || '',
 		email: guest.email || '',
-		category: guest.category || '',
+		category: safeCategory,
 		group: guest.group || '',
 		notes: guest.notes || '',
 		maxCompanions: guest.maxCompanions ?? 0,
@@ -60,6 +58,8 @@ export function GuestEditForm({ guest }: { guest: GuestData }) {
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		// Proteção contra submissão dupla: desabilita imediatamente antes do await
+		if (isSubmitting) return;
 		setIsSubmitting(true);
 		setError(null);
 		setSuccess(null);
@@ -167,7 +167,7 @@ export function GuestEditForm({ guest }: { guest: GuestData }) {
 							className="w-full rounded-lg border border-outline-variant/30 bg-surface px-4 py-3 text-body-md text-on-surface focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim transition-colors"
 						>
 							<option value="">Selecione uma categoria</option>
-							{CATEGORIES.map((cat) => (
+							{GUEST_CATEGORIES.map((cat) => (
 								<option key={cat.value} value={cat.value}>
 									{cat.label}
 								</option>

@@ -15,12 +15,13 @@ import { requireAdminSession } from '@/lib/auth/admin-session';
 import { createInvitation } from '@/lib/repositories/invitation.repository';
 import type { ApiResponse } from '@/types';
 import { z } from 'zod';
+import { GUEST_CATEGORY_VALUES } from '@/lib/constants/guest-categories';
 
 const generateInvitationSchema = z.object({
 	guestId: z.string().min(1, 'ID do convidado é obrigatório'),
 	displayName: z.string().min(2, 'Nome de exibição deve ter pelo menos 2 caracteres').max(200),
 	maxCompanions: z.coerce.number().int().min(0).max(50).default(0),
-	category: z.enum(['familia_noiva', 'familia_noivo', 'padrinhos', 'amigos', 'colegas']),
+	category: z.enum(GUEST_CATEGORY_VALUES),
 });
 
 export interface GenerateInvitationResult {
