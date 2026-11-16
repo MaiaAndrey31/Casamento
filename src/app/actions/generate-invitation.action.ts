@@ -13,6 +13,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireAdminSession } from '@/lib/auth/admin-session';
 import { createInvitation } from '@/lib/repositories/invitation.repository';
+import { encryptToken, isEncryptionConfigured } from '@/lib/crypto/invitation-vault';
 import type { ApiResponse } from '@/types';
 import { z } from 'zod';
 import { GUEST_CATEGORY_VALUES } from '@/lib/constants/guest-categories';
@@ -97,6 +98,15 @@ export async function generateInvitationAction(
 			}
 		}
 
+		// Verificar se criptografia está configurada (necessário para recuperação futura)
+		const encryptionReady = await isEncryptionConfigured();
+		if (!encryptionReady) {
+			return {
+				success: false,
+				error: 'INVITATION_ENCRYPTION_KEY não configurada. Adicione a variável de ambiente privada na Vercel antes de gerar convites.',
+			};
+		}
+
 		// Criar convite
 		const result = await createInvitation(eventId, {
 			displayName: validation.data.displayName,
@@ -111,6 +121,19 @@ export async function generateInvitationAction(
 				error: result.error || 'Falha ao gerar convite.',
 			};
 		}
+
+		// Criptografar token para recuperação futura
+		const encryptedToken = await encryptToken(result.token);
+
+		// Armazenar token criptografado no documento do convite
+		await adminDb
+			.collection('events')
+			.doc(eventId)
+			.collection('invitations')
+			.doc(result.invitationId)
+			.update({
+				encryptedToken,
+			});
 
 		// Associar convite ao convidado
 		await adminDb

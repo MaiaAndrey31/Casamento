@@ -16,9 +16,12 @@ import {
 	RefreshCw,
 	X,
 	ExternalLink,
+	Link as LinkIcon,
 } from 'lucide-react';
 import type { GuestWithInvitation } from '@/lib/repositories/guest.repository';
 import { generateInvitationAction } from '@/app/actions/generate-invitation.action';
+import { recoverInvitationLinkAction } from '@/app/actions/recover-invitation-link.action';
+import { regenerateInvitationAction } from '@/app/actions/regenerate-invitation.action';
 import { deactivateGuestAction } from '@/app/actions/deactivate-guest.action';
 
 interface GuestActionsMenuProps {
@@ -29,13 +32,14 @@ interface GuestActionsMenuProps {
 /**
  * Menu dropdown de ações + Modal de token para cada convidado.
  *
- * FLUXO CORRIGIDO:
- * - Após gerar convite, o modal permanece aberto com o link visível.
- * - O modal NÃO fecha ao clicar fora ou pressionar Escape (apenas pelo botão X).
- * - Para convites existentes sem token disponível, oferece regeneração com confirmação.
- * - Copiar e WhatsApp funcionam diretamente no modal.
+ * TRÊS OPERAÇÕES SEPARADAS:
+ * A) Gerar convite — somente quando NÃO existe convite ativo
+ * B) Recuperar link — descriptografa token existente (sem modificar)
+ * C) Regenerar link — cria novo token para convite ATIVO existente
  *
- * SEGURANÇA: Nenhum import server-only. Todas as escritas via Server Actions.
+ * CONVITES LEGADOS:
+ * Convites sem encryptedToken recebem aviso claro e opção de regeneração.
+ * A recuperação falha com mensagem orientativa; regeneração funciona normalmente.
  */
 export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 	const router = useRouter();
@@ -43,47 +47,41 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 	const [loading, setLoading] = useState<string | null>(null);
 	const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-	// Estado do modal de token — persiste independente do dropdown
 	const [tokenModal, setTokenModal] = useState<{
 		open: boolean;
 		url: string | null;
-		isNew: boolean; // true = recém-gerado, false = regenerado
-	}>({ open: false, url: null, isNew: false });
+		isNew: boolean;
+		title: string;
+		description: string;
+	}>({ open: false, url: null, isNew: false, title: '', description: '' });
 
 	const menuRef = useRef<HTMLDivElement>(null);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
-	// Fechar dropdown ao clicar fora (NÃO fecha o modal de token)
 	useEffect(() => {
 		if (!isOpen) return;
-
 		const handleClickOutside = (e: MouseEvent) => {
 			if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
 				setIsOpen(false);
 			}
 		};
-
 		document.addEventListener('mousedown', handleClickOutside);
 		return () => document.removeEventListener('mousedown', handleClickOutside);
 	}, [isOpen]);
 
-	// Fechar dropdown com Escape (NÃO fecha o modal de token)
 	useEffect(() => {
 		if (!isOpen) return;
-
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') {
 				setIsOpen(false);
 				buttonRef.current?.focus();
 			}
 		};
-
 		document.addEventListener('keydown', handleKeyDown);
 		return () => document.removeEventListener('keydown', handleKeyDown);
 	}, [isOpen]);
 
-	// Focar no primeiro item ao abrir dropdown
 	useEffect(() => {
 		if (isOpen && itemsRef.current[0]) {
 			itemsRef.current[0]?.focus();
@@ -92,11 +90,13 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 
 	const showFeedback = useCallback((type: 'success' | 'error', message: string) => {
 		setFeedback({ type, message });
-		setTimeout(() => setFeedback(null), 4000);
+		setTimeout(() => setFeedback(null), 5000);
 	}, []);
 
+	// OPERAÇÃO A — Gerar convite (somente sem convite ativo)
 	const handleGenerateInvitation = async () => {
 		setLoading('generate');
+		setFeedback(null);
 		try {
 			const result = await generateInvitationAction({
 				guestId: guest.id,
@@ -106,11 +106,12 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 			});
 
 			if (result.success && result.data) {
-				// Abrir modal persistente com o link
 				setTokenModal({
 					open: true,
 					url: result.data.inviteUrl,
 					isNew: true,
+					title: 'Convite Gerado!',
+					description: 'Copie ou compartilhe o link abaixo. Ele pode ser recuperado posteriormente pelo painel.',
 				});
 				setIsOpen(false);
 				onRefresh?.();
@@ -124,6 +125,35 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 		}
 	};
 
+	// OPERAÇÃO B — Recuperar link (descriptografa token existente)
+	const handleRecoverLink = async () => {
+		setLoading('recover');
+		setFeedback(null);
+		try {
+			const result = await recoverInvitationLinkAction({
+				guestId: guest.id,
+			});
+
+			if (result.success && result.data) {
+				setTokenModal({
+					open: true,
+					url: result.data.inviteUrl,
+					isNew: false,
+					title: 'Link Recuperado',
+					description: 'Este é o link atual do convite. Copie ou compartilhe conforme necessário.',
+				});
+				setIsOpen(false);
+			} else {
+				showFeedback('error', result.error || 'Falha ao recuperar link.');
+			}
+		} catch {
+			showFeedback('error', 'Erro inesperado ao recuperar link.');
+		} finally {
+			setLoading(null);
+		}
+	};
+
+	// OPERAÇÃO C — Regenerar link (novo token para convite ativo)
 	const handleRegenerateInvitation = async () => {
 		if (!confirm(
 			`Regenerar o link de acesso para ${guest.fullName}?\n\n` +
@@ -134,14 +164,10 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 		}
 
 		setLoading('regenerate');
+		setFeedback(null);
 		try {
-			// Regeneração usa a mesma Server Action de geração,
-			// mas o repository deve invalidar o hash anterior
-			const result = await generateInvitationAction({
+			const result = await regenerateInvitationAction({
 				guestId: guest.id,
-				displayName: guest.fullName,
-				maxCompanions: 0,
-				category: (guest.category as 'familia_noiva' | 'familia_noivo' | 'padrinhos' | 'amigos' | 'colegas') || 'amigos',
 			});
 
 			if (result.success && result.data) {
@@ -149,6 +175,8 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 					open: true,
 					url: result.data.inviteUrl,
 					isNew: false,
+					title: 'Link Regenerado!',
+					description: 'O link anterior foi invalidado. Copie ou compartilhe o novo link abaixo.',
 				});
 				setIsOpen(false);
 				onRefresh?.();
@@ -199,6 +227,7 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 		}
 
 		setLoading('deactivate');
+		setFeedback(null);
 		try {
 			const result = await deactivateGuestAction({ guestId: guest.id });
 
@@ -216,7 +245,6 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 		}
 	};
 
-	// Construir itens do menu dinamicamente
 	const menuItems = [
 		{
 			id: 'edit',
@@ -229,6 +257,12 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 		},
 		...(guest.invitationId
 			? [
+					{
+						id: 'recover',
+						label: 'Copiar link do convite',
+						icon: LinkIcon,
+						action: handleRecoverLink,
+					},
 					{
 						id: 'regenerate',
 						label: 'Regenerar link de acesso',
@@ -265,7 +299,6 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 	return (
 		<>
 			<div className="relative" ref={menuRef}>
-				{/* Botão trigger */}
 				<button
 					ref={buttonRef}
 					onClick={() => setIsOpen(!isOpen)}
@@ -284,20 +317,17 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 					{loading ? <Loader2 size={16} className="animate-spin" /> : <MoreHorizontal size={16} />}
 				</button>
 
-				{/* Dropdown */}
 				{isOpen && (
 					<div
 						className="absolute right-0 top-full z-50 mt-1 w-64 origin-top-right rounded-xl border border-outline-variant/20 bg-surface-container-lowest py-1 shadow-xl ring-1 ring-black/5"
 						role="menu"
 						aria-orientation="vertical"
 					>
-						{/* Header do menu */}
 						<div className="border-b border-outline-variant/10 px-3 py-2">
 							<p className="truncate text-body-sm font-semibold text-primary">{guest.fullName}</p>
 							<p className="truncate text-[11px] text-on-surface-variant">{guest.phone}</p>
 						</div>
 
-						{/* Feedback toast inline */}
 						{feedback && (
 							<div
 								className={`mx-2 mb-1 flex items-start gap-2 rounded-lg p-2 text-[11px] ${
@@ -315,16 +345,6 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 							</div>
 						)}
 
-						{/* Aviso para convites existentes sem token */}
-						{guest.invitationId && (
-							<div className="mx-2 mb-1 rounded-lg border border-amber-200 bg-amber-50 p-2">
-								<p className="text-[11px] leading-relaxed text-amber-800">
-									⚠️ O link original deste convite não pode ser recuperado. Use "Regenerar link de acesso" para criar um novo.
-								</p>
-							</div>
-						)}
-
-						{/* Itens do menu */}
 						{menuItems.map((item, index) => {
 							const Icon = item.icon;
 							const isDanger = 'danger' in item && item.danger;
@@ -373,16 +393,13 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 			{tokenModal.open && tokenModal.url && (
 				<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
 					<div className="w-full max-w-md overflow-hidden rounded-2xl bg-surface-container-lowest shadow-2xl">
-						{/* Header do modal */}
 						<div className="flex items-center justify-between border-b border-outline-variant/10 bg-gradient-to-r from-[#17291F] to-[#2d4a3a] px-6 py-4">
 							<div className="flex items-center gap-2">
 								<Check size={20} className="text-[#D4AF37]" />
-								<h3 className="text-title-md text-white">
-									{tokenModal.isNew ? 'Convite Gerado!' : 'Link Regenerado!'}
-								</h3>
+								<h3 className="text-title-md text-white">{tokenModal.title}</h3>
 							</div>
 							<button
-								onClick={() => setTokenModal({ open: false, url: null, isNew: false })}
+								onClick={() => setTokenModal({ open: false, url: null, isNew: false, title: '', description: '' })}
 								className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
 								aria-label="Fechar"
 							>
@@ -390,15 +407,9 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 							</button>
 						</div>
 
-						{/* Conteúdo do modal */}
 						<div className="space-y-4 p-6">
-							<p className="text-body-md text-on-surface-variant">
-								{tokenModal.isNew
-									? 'Copie ou compartilhe o link abaixo. Ele não será exibido novamente após fechar esta janela.'
-									: 'O link anterior foi invalidado. Copie ou compartilhe o novo link abaixo.'}
-							</p>
+							<p className="text-body-md text-on-surface-variant">{tokenModal.description}</p>
 
-							{/* Campo com link selecionável */}
 							<div className="flex items-center gap-2 rounded-lg border border-tertiary-fixed-dim/30 bg-surface-container-low p-3">
 								<input
 									type="text"
@@ -411,12 +422,11 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 									onClick={() => handleCopyLink(tokenModal.url!)}
 									className="shrink-0 rounded-md bg-primary-container px-3 py-1.5 text-label-sm uppercase tracking-widest text-tertiary-fixed transition-colors hover:bg-secondary"
 								>
-									<Copy size={14} className="inline mr-1" />
+									<Copy size={14} className="mr-1 inline" />
 									Copiar
 								</button>
 							</div>
 
-							{/* Ações do modal */}
 							<div className="flex gap-3">
 								<button
 									onClick={() => handleShareWhatsApp(tokenModal.url!)}

@@ -65,8 +65,11 @@ export interface Invitation {
   maxCompanions: number;
   invitationStatus: 'active' | 'revoked' | 'expired';
   tokenHash: string; // SHA-256 do token de acesso (nunca armazenar token em claro)
+  encryptedToken?: string; // AES-256-GCM do token original (para recuperação admin)
   tokenExpiresAt: string; // ISO 8601
   category: string; // Valores definidos em src/lib/constants/guest-categories.ts
+  regeneratedAt?: string; // Timestamp da última regeneração
+  regeneratedBy?: string; // UID do admin que regenerou
   createdAt: string;
   updatedAt: string;
 }
