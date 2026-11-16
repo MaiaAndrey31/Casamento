@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
 	MoreHorizontal,
 	Eye,
@@ -12,31 +13,32 @@ import {
 	Loader2,
 	Check,
 	AlertCircle,
-	ExternalLink,
 } from 'lucide-react';
 import type { GuestWithInvitation } from '@/lib/repositories/guest.repository';
 import { generateInvitationAction } from '@/app/actions/generate-invitation.action';
+import { deactivateGuestAction } from '@/app/actions/deactivate-guest.action';
 
 interface GuestActionsMenuProps {
 	guest: GuestWithInvitation;
-	onEdit?: (guest: GuestWithInvitation) => void;
-	onDeactivate?: (guest: GuestWithInvitation) => void;
+	onRefresh?: () => void;
 }
 
 /**
  * Menu dropdown de ações para cada convidado na listagem administrativa.
  *
- * Funcionalidades:
- * - Abrir/fechar por clique ou toque
- * - Fechar ao clicar fora ou pressionar Escape
- * - Navegação por teclado (setas + Enter)
- * - Atributos ARIA para acessibilidade
- * - Feedback visual de loading, sucesso e erro
- * - Geração de convite com token seguro (exibido apenas uma vez)
- * - Compartilhamento via WhatsApp (wa.me)
- * - Cópia de link via Clipboard API
+ * Todas as opções têm comportamento real:
+ * - Editar → navega para /admin/convidados/[id]/editar
+ * - Gerar convite → Server Action com token seguro (exibido apenas uma vez)
+ * - WhatsApp → abre wa.me com mensagem codificada
+ * - Copiar link → Clipboard API
+ * - Prévia → navega para /admin/convites/[id]/preview
+ * - Desativar → Server Action com confirmação e auditoria
+ *
+ * SEGURANÇA: Nenhum componente client-side importa repositories server-only.
+ * Todas as operações de escrita usam Server Actions dedicadas.
  */
-export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMenuProps) {
+export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
+	const router = useRouter();
 	const [isOpen, setIsOpen] = useState(false);
 	const [loading, setLoading] = useState<string | null>(null);
 	const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -102,6 +104,7 @@ export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMe
 			if (result.success && result.data) {
 				setGeneratedToken(result.data.inviteUrl);
 				showFeedback('success', 'Convite gerado! Copie o link agora.');
+				onRefresh?.();
 			} else {
 				showFeedback('error', result.error || 'Falha ao gerar convite.');
 			}
@@ -123,7 +126,6 @@ export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMe
 
 	const handleShareWhatsApp = (url: string) => {
 		const phone = guest.phone.replace(/\D/g, '');
-		// Normalizar telefone brasileiro
 		let normalizedPhone = phone;
 		if (phone.startsWith('55') && phone.length > 11) {
 			normalizedPhone = phone;
@@ -144,24 +146,37 @@ export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMe
 		window.open(`https://wa.me/${normalizedPhone}?text=${message}`, '_blank', 'noopener,noreferrer');
 	};
 
+	const handleDeactivate = async () => {
+		if (!confirm(`Tem certeza que deseja desativar ${guest.fullName}?\n\nEsta ação é reversível, mas o convite associado poderá ser revogado se não houver outros convidados ativos.`)) {
+			return;
+		}
+
+		setLoading('deactivate');
+		try {
+			const result = await deactivateGuestAction({ guestId: guest.id });
+
+			if (result.success) {
+				showFeedback('success', result.message || 'Convidado desativado com sucesso.');
+				onRefresh?.();
+			} else {
+				showFeedback('error', result.error || 'Falha ao desativar convidado.');
+			}
+		} catch {
+			showFeedback('error', 'Erro inesperado ao desativar convidado.');
+		} finally {
+			setLoading(null);
+			setIsOpen(false);
+		}
+	};
+
 	const menuItems = [
-		{
-			id: 'view',
-			label: 'Visualizar detalhes',
-			icon: Eye,
-			action: () => {
-				setIsOpen(false);
-				// TODO: Implementar modal ou rota de detalhes
-				showFeedback('success', `Detalhes de ${guest.fullName}`);
-			},
-		},
 		{
 			id: 'edit',
 			label: 'Editar convidado',
 			icon: Pencil,
 			action: () => {
 				setIsOpen(false);
-				onEdit?.(guest);
+				router.push(`/admin/convidados/${guest.id}/editar`);
 			},
 		},
 		...(guest.invitationId
@@ -171,7 +186,6 @@ export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMe
 						label: 'Enviar pelo WhatsApp',
 						icon: MessageCircle,
 						action: () => {
-							// Se já tem convite mas não temos o token, informar
 							if (!generatedToken) {
 								showFeedback('error', 'Link do convite não disponível. Gere um novo convite para compartilhar.');
 								return;
@@ -194,8 +208,11 @@ export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMe
 					{
 						id: 'preview',
 						label: 'Visualizar prévia',
-						icon: ExternalLink,
-						href: `/convite/preview/${guest.invitationId}`,
+						icon: Eye,
+						action: () => {
+							setIsOpen(false);
+							router.push(`/admin/convites/${guest.invitationId}/preview`);
+						},
 					},
 				]
 			: [
@@ -211,12 +228,7 @@ export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMe
 			label: 'Desativar convidado',
 			icon: Trash2,
 			danger: true,
-			action: () => {
-				setIsOpen(false);
-				if (confirm(`Tem certeza que deseja desativar ${guest.fullName}? Esta ação pode ser revertida.`)) {
-					onDeactivate?.(guest);
-				}
-			},
+			action: handleDeactivate,
 		},
 	];
 
@@ -307,37 +319,6 @@ export function GuestActionsMenu({ guest, onEdit, onDeactivate }: GuestActionsMe
 						const Icon = item.icon;
 						const isDanger = 'danger' in item && item.danger;
 						const isLoadingItem = loading === item.id;
-
-						if ('href' in item && item.href) {
-							return (
-								<a
-									key={item.id}
-									ref={(el) => { itemsRef.current[index] = el; }}
-									href={item.href}
-									target="_blank"
-									rel="noopener noreferrer"
-									role="menuitem"
-									tabIndex={0}
-									onKeyDown={(e) => {
-										if (e.key === 'ArrowDown') {
-											e.preventDefault();
-											itemsRef.current[index + 1]?.focus();
-										} else if (e.key === 'ArrowUp') {
-											e.preventDefault();
-											itemsRef.current[index - 1]?.focus();
-										}
-									}}
-									className={`flex w-full items-center gap-3 px-3 py-2.5 text-body-sm transition-colors focus:outline-none focus:bg-surface-container-low ${
-										isDanger
-											? 'text-error hover:bg-error-container/10'
-											: 'text-on-surface hover:bg-surface-container-low hover:text-primary'
-									}`}
-								>
-									<Icon size={16} />
-									{item.label}
-								</a>
-							);
-						}
 
 						return (
 							<button

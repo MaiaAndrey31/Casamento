@@ -65,8 +65,7 @@ export function GuestListClient({ guests }: { guests: GuestWithInvitation[] }) {
 							{/* Menu dropdown de ações */}
 							<GuestActionsMenu
 								guest={guest}
-								onEdit={handleEdit}
-								onDeactivate={handleDeactivate}
+								onRefresh={() => setRefreshKey(prev => prev + 1)}
 							/>
 						</div>
 					</div>
