@@ -1,16 +1,56 @@
 import { Calendar, Clock, MapPin, Shirt, Navigation } from 'lucide-react';
 import { WEDDING_CONFIG } from '@/config/wedding';
 
+interface EventDetailsProps {
+	eventDate?: string | null;
+	timezone?: string | null;
+	ceremonyTime?: string | null;
+	receptionTime?: string | null;
+	venueName?: string | null;
+	venueAddress?: string | null;
+	mapsUrl?: string | null;
+	wazeUrl?: string | null;
+	dressCode?: string | null;
+	/** Modo de exibição: 'public' oculta endereço completo por privacidade; 'invitation' mostra tudo */
+	mode?: 'public' | 'invitation';
+}
+
 /**
  * Detalhes do Grande Dia — Cards com informações do evento.
+ * Recebe dados via props (Firestore) com fallback para WEDDING_CONFIG estático.
  * Exibe estado "não configurado" para dados ainda não preenchidos,
  * sem inventar endereços ou horários fictícios.
+ *
+ * PRIVACIDADE: No modo 'public', o endereço completo NÃO é exibido
+ * (espaço particular/residencial). Apenas no modo 'invitation' (token válido)
+ * ou 'admin' o endereço e botões de navegação são mostrados.
  */
-export function EventDetails() {
-	const hasVenue = WEDDING_CONFIG.venueName !== null;
-	const hasDate = WEDDING_CONFIG.eventDate !== null;
-	const hasTime = WEDDING_CONFIG.ceremonyTime !== null;
-	const hasDressCode = WEDDING_CONFIG.dressCode !== null;
+export function EventDetails(props: EventDetailsProps) {
+	// Mesclar props com fallback estático
+	const eventDate = props.eventDate || WEDDING_CONFIG.eventDate;
+	const timezone = props.timezone || WEDDING_CONFIG.timezone;
+	const ceremonyTime = props.ceremonyTime || WEDDING_CONFIG.ceremonyTime;
+	const receptionTime = props.receptionTime ?? WEDDING_CONFIG.receptionTime;
+	const venueName = props.venueName || WEDDING_CONFIG.venueName;
+	const venueAddress = props.venueAddress || WEDDING_CONFIG.venueAddress;
+	const mapsUrl = props.mapsUrl || WEDDING_CONFIG.mapsUrl;
+	const wazeUrl = props.wazeUrl || WEDDING_CONFIG.wazeUrl;
+	const dressCode = props.dressCode || WEDDING_CONFIG.dressCode;
+
+	const mode = props.mode || 'invitation';
+	const isPublic = mode === 'public';
+
+	const hasVenueInfo = !!(venueName || venueAddress);
+	const hasDate = eventDate !== null && eventDate !== '';
+	const hasTime = ceremonyTime !== null && ceremonyTime !== '';
+	const hasDressCode = dressCode !== null && dressCode !== '';
+
+	// Links de navegação fallback a partir do endereço (apenas em modo invitation/admin)
+	const encodedAddress = !isPublic && venueAddress ? encodeURIComponent(venueAddress) : null;
+	const fallbackMapsUrl = encodedAddress ? `https://www.google.com/maps/search/?api=1&query=${encodedAddress}` : null;
+	const fallbackWazeUrl = encodedAddress ? `https://waze.com/ul?q=${encodedAddress}&navigate=yes` : null;
+	const effectiveMapsUrl = !isPublic ? (mapsUrl || fallbackMapsUrl) : null;
+	const effectiveWazeUrl = !isPublic ? (wazeUrl || fallbackWazeUrl) : null;
 
 	return (
 		<section id="detalhes" className="bg-surface-container-low py-space-2xl px-gutter">
@@ -38,12 +78,12 @@ export function EventDetails() {
 						</div>
 						{hasDate ? (
 							<p className="text-body-lg text-on-surface">
-								{new Date(WEDDING_CONFIG.eventDate!).toLocaleDateString('pt-BR', {
+								{new Date(eventDate!).toLocaleDateString('pt-BR', {
 									weekday: 'long',
 									day: 'numeric',
 									month: 'long',
 									year: 'numeric',
-									timeZone: WEDDING_CONFIG.timezone,
+									timeZone: timezone || 'America/Sao_Paulo',
 								})}
 							</p>
 						) : (
@@ -65,12 +105,12 @@ export function EventDetails() {
 							<div className="space-y-1">
 								<p className="text-body-md text-on-surface">
 									<span className="font-semibold text-primary-container">Cerimônia:</span>{' '}
-									{WEDDING_CONFIG.ceremonyTime}
+									{ceremonyTime}
 								</p>
-								{WEDDING_CONFIG.receptionTime && (
+								{receptionTime && (
 									<p className="text-body-md text-on-surface">
 										<span className="font-semibold text-primary-container">Recepção:</span>{' '}
-										{WEDDING_CONFIG.receptionTime}
+										{receptionTime}
 									</p>
 								)}
 							</div>
@@ -87,43 +127,58 @@ export function EventDetails() {
 							<div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container/50">
 								<MapPin size={20} className="text-primary-container" />
 							</div>
-							<h3 className="text-headline-sm text-primary">Local</h3>
+							<h3 className="text-headline-sm text-primary">Local da Cerimônia</h3>
 						</div>
-						{hasVenue ? (
+						{isPublic ? (
+							/* Modo público: NÃO exibir endereço completo por privacidade (espaço particular/residencial) */
 							<div className="space-y-2">
 								<p className="text-body-lg font-medium text-primary-container">
-									{WEDDING_CONFIG.venueName}
+									Espaço particular
 								</p>
-								{WEDDING_CONFIG.venueAddress && (
-									<p className="text-body-md text-on-surface-variant">
-										{WEDDING_CONFIG.venueAddress}
+								<p className="text-body-md text-on-surface-variant">
+									O endereço completo e as orientações de chegada estão disponíveis no seu convite individual.
+								</p>
+							</div>
+						) : hasVenueInfo ? (
+							/* Modo invitation/admin: exibir endereço completo e botões de navegação */
+							<div className="space-y-2">
+								{venueName && (
+									<p className="text-body-lg font-medium text-primary-container">
+										{venueName}
 									</p>
 								)}
-								{/* Botões de navegação */}
-								<div className="mt-space-md flex flex-wrap gap-3">
-									{WEDDING_CONFIG.mapsUrl && (
-										<a
-											href={WEDDING_CONFIG.mapsUrl}
-											target="_blank"
-											rel="noopener noreferrer"
-											className="inline-flex items-center gap-2 rounded-md border border-primary-container bg-primary-container px-5 py-3 text-label-md uppercase tracking-widest text-tertiary-fixed transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
-										>
-											<Navigation size={16} />
-											Google Maps
-										</a>
-									)}
-									{WEDDING_CONFIG.wazeUrl && (
-										<a
-											href={WEDDING_CONFIG.wazeUrl}
-											target="_blank"
-											rel="noopener noreferrer"
-											className="inline-flex items-center gap-2 rounded-md border border-primary-container px-5 py-3 text-label-md uppercase tracking-widest text-primary-container transition-colors hover:bg-secondary-container/30 focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
-										>
-											<Navigation size={16} />
-											Waze
-										</a>
-									)}
-								</div>
+								{venueAddress && (
+									<p className={`text-body-md whitespace-pre-line text-on-surface-variant ${venueName ? '' : ''}`}>
+										{venueAddress}
+									</p>
+								)}
+								{/* Botões de navegação — URLs cadastradas ou fallback pelo endereço */}
+								{(effectiveMapsUrl || effectiveWazeUrl) && (
+									<div className="mt-space-md flex flex-wrap gap-3">
+										{effectiveMapsUrl && (
+											<a
+												href={effectiveMapsUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="inline-flex items-center gap-2 rounded-md border border-primary-container bg-primary-container px-5 py-3 text-label-md uppercase tracking-widest text-tertiary-fixed transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
+											>
+												<Navigation size={16} />
+												Ver no Google Maps
+											</a>
+										)}
+										{effectiveWazeUrl && (
+											<a
+												href={effectiveWazeUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="inline-flex items-center gap-2 rounded-md border border-primary-container px-5 py-3 text-label-md uppercase tracking-widest text-primary-container transition-colors hover:bg-secondary-container/30 focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim focus:ring-offset-2"
+											>
+												<Navigation size={16} />
+												Abrir no Waze
+											</a>
+										)}
+									</div>
+								)}
 							</div>
 						) : (
 							<p className="text-body-md italic text-on-surface-variant">
@@ -141,7 +196,7 @@ export function EventDetails() {
 								</div>
 								<h3 className="text-headline-sm text-primary">Dress Code</h3>
 							</div>
-							<p className="text-body-md text-on-surface">{WEDDING_CONFIG.dressCode}</p>
+							<p className="text-body-md text-on-surface">{dressCode}</p>
 						</div>
 					)}
 				</div>

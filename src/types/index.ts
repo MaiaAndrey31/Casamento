@@ -33,6 +33,7 @@ export interface WeddingEvent {
   closingMessage: string;
   closingVerse: string;
   closingVerseReference: string;
+  closingSignature?: string;
 
   // Seção Nossa História
   storyTitle: string;

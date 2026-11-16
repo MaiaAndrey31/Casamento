@@ -6,27 +6,52 @@ import { Messages } from '@/components/wedding/Messages';
 import { Closing } from '@/components/wedding/Closing';
 import { WeddingNavigation } from '@/components/wedding/WeddingNavigation';
 import { SectionAnimations } from '@/components/wedding/SectionAnimations';
+import { getActiveEvent } from '@/lib/repositories/event.repository';
 
 /**
  * Página Inicial — Convite Público Completo
  *
  * Integra todas as seções do convite digital preservando o design do Google Stitch.
- * Animações GSAP são aplicadas via componentes client-side separados.
- * A navegação mobile é renderizada como componente client-side separado.
+ * Carrega dados do Firestore e repassa como props aos componentes.
+ * NOTA: Esta é uma página PÚBLICA. O endereço completo NÃO é exibido aqui
+ * por questões de privacidade (espaço particular/residencial).
+ * O endereço completo aparece apenas no convite individual /convite/[token].
  */
-export default function HomePage() {
+export default async function HomePage() {
+	const event = await getActiveEvent();
+
 	return (
- <>
- <SectionAnimations />
- <main className="pb-16 md:pb-0">
- <Hero />
- <Countdown />
- <StoryAnimations />
- <EventDetails />
- <Messages />
- <Closing />
- </main>
- <WeddingNavigation />
- </>
+		<>
+			<SectionAnimations />
+			<main className="pb-16 md:pb-0">
+				<Hero
+					heroMessage={event?.heroMessage}
+					heroVerse={event?.heroVerse}
+					heroVerseReference={event?.heroVerseReference}
+				/>
+				<Countdown />
+				<StoryAnimations />
+				<EventDetails
+					eventDate={event?.eventDate}
+					timezone={event?.timezone}
+					ceremonyTime={event?.ceremonyTime}
+					receptionTime={event?.receptionTime}
+					venueName={event?.venueName}
+					venueAddress={event?.venueAddress}
+					mapsUrl={event?.mapsUrl}
+					wazeUrl={event?.wazeUrl}
+					dressCode={event?.dressCode}
+					mode="public"
+				/>
+				<Messages />
+				<Closing
+					coupleNames={event?.coupleNames}
+					closingMessage={event?.closingMessage}
+					closingVerseReference={event?.closingVerseReference}
+					closingSignature={event?.closingSignature}
+				/>
+			</main>
+			<WeddingNavigation />
+		</>
 	);
 }

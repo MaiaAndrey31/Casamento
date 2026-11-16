@@ -4,10 +4,17 @@ import Image from 'next/image';
 import { ChevronDown } from 'lucide-react';
 import { WEDDING_CONFIG, getAssetPath } from '@/config/wedding';
 
+interface HeroProps {
+	heroMessage?: string | null;
+	heroVerse?: string | null;
+	heroVerseReference?: string | null;
+}
+
 /**
  * Hero — Nossa Aliança
  * Seção principal do convite com nova logo, fotografia real do casal,
  * data em destaque, mensagem cristã e CTA para confirmação de presença.
+ * Recebe dados via props (Firestore) com fallback para WEDDING_CONFIG estático.
  *
  * REFINAMENTO VISUAL:
  * - Faixa branca eliminada: section ocupa 100dvh com overflow-hidden,
@@ -18,7 +25,10 @@ import { WEDDING_CONFIG, getAssetPath } from '@/config/wedding';
  * - Degradê branco substituído por verde floresta profundo (#17291F) em camadas.
  * - Conteúdo com padding-top dinâmico para não ficar atrás do header sticky.
  */
-export function Hero() {
+export function Hero(props: HeroProps) {
+	const heroMessage = props.heroMessage || WEDDING_CONFIG.heroMessage;
+	const heroVerse = props.heroVerse || WEDDING_CONFIG.heroVerse;
+	const heroVerseReference = props.heroVerseReference || WEDDING_CONFIG.heroVerseReference;
 	const scrollToNext = () => {
  const nextSection = document.getElementById('countdown');
  nextSection?.scrollIntoView({ behavior: 'smooth' });
@@ -79,16 +89,16 @@ export function Hero() {
 
  {/* Mensagem principal — largura e tamanho ajustados */}
  <p data-hero-message className="max-w-xl text-body-lg italic text-surface-container-low/95 leading-relaxed drop-shadow-md md:text-headline-sm md:leading-loose">
- &ldquo;{WEDDING_CONFIG.heroMessage}&rdquo;
+ &ldquo;{heroMessage}&rdquo;
  </p>
 
  {/* Versículo — legibilidade aumentada */}
  <div data-hero-verse className="mt-space-lg max-w-lg">
  <p className="text-body-md text-surface-container-low/90 md:text-body-lg">
- &ldquo;{WEDDING_CONFIG.heroVerse}&rdquo;
+ &ldquo;{heroVerse}&rdquo;
  </p>
  <p className="mt-space-xs text-label-md uppercase tracking-widest text-tertiary-fixed-dim/90 md:text-title-sm">
- {WEDDING_CONFIG.heroVerseReference}
+ {heroVerseReference}
  </p>
  </div>
 
