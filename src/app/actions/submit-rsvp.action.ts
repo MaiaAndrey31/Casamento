@@ -127,6 +127,9 @@ export async function submitRsvpAction(
 					.doc(formData.invitationId)
 					.update({
 						checkInTokenHash,
+						// Persistir token plain para recuperação posterior pelo convidado
+						// Acesso protegido por validação server-side do token do convite + RSVP confirmado
+						checkInTokenPlain: checkInToken,
 						updatedAt: FieldValue.serverTimestamp(),
 					});
 			}

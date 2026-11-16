@@ -364,6 +364,9 @@ export default async function InvitationPage({ params }: PageProps) {
 							<RsvpConfirmedView
 								rsvp={existingRsvp}
 								displayName={invitation.displayName}
+								eventId={eventId}
+								invitationId={invitation.id}
+								token={token}
 								eventDate={config.eventDate}
 								ceremonyTime={config.ceremonyTime}
 								timezone={config.timezone || 'America/Sao_Paulo'}

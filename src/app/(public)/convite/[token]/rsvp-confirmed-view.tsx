@@ -1,9 +1,16 @@
-import { CheckCircle, XCircle, Users, MapPin, Calendar, Clock, Navigation, Heart, Edit3 } from 'lucide-react';
+'use client';
+
+import { useState } from 'react';
+import { CheckCircle, XCircle, Users, MapPin, Calendar, Clock, Navigation, Heart, Edit3, QrCode } from 'lucide-react';
 import type { RSVP, CompanionInfo } from '@/types';
+import { QrCodeModal } from './qr-code-modal';
 
 interface RsvpConfirmedViewProps {
 	rsvp: RSVP;
 	displayName: string;
+	eventId: string;
+	invitationId: string;
+	token: string;
 	eventDate: string | null;
 	ceremonyTime: string | null;
 	timezone: string;
@@ -28,6 +35,9 @@ interface RsvpConfirmedViewProps {
 export function RsvpConfirmedView({
 	rsvp,
 	displayName,
+	eventId,
+	invitationId,
+	token,
 	eventDate,
 	ceremonyTime,
 	timezone,
@@ -39,6 +49,7 @@ export function RsvpConfirmedView({
 	canEdit,
 	onEdit,
 }: RsvpConfirmedViewProps) {
+	const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 	const isConfirmed = rsvp.attendanceStatus === 'confirmed';
 	const confirmedCompanions = rsvp.companions.filter((c: CompanionInfo) => c.name.trim());
 
@@ -204,6 +215,20 @@ export function RsvpConfirmedView({
 				</div>
 			)}
 
+			{/* Botão Visualizar QR Code — apenas para confirmados */}
+			{isConfirmed && (
+				<div className="text-center">
+					<button
+						type="button"
+						onClick={() => setIsQrModalOpen(true)}
+						className="inline-flex items-center gap-3 rounded-xl bg-[#17291F] px-8 py-4 text-label-md uppercase tracking-widest text-[#e4c286] shadow-lg transition-all hover:bg-[#0a1f12] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#e4c286]/50 focus:ring-offset-2"
+					>
+						<QrCode size={20} />
+						Visualizar meu QR Code
+					</button>
+				</div>
+			)}
+
 			{/* Opção de alteração (apenas se permitido) */}
 			{canEdit && onEdit && (
 				<div className="border-t border-[#17291F]/10 pt-6 text-center">
@@ -217,6 +242,16 @@ export function RsvpConfirmedView({
 					</button>
 				</div>
 			)}
+
+			{/* Modal de QR Code */}
+			<QrCodeModal
+				isOpen={isQrModalOpen}
+				onClose={() => setIsQrModalOpen(false)}
+				eventId={eventId}
+				invitationId={invitationId}
+				token={token}
+				displayName={displayName}
+			/>
 		</div>
 	);
 }
