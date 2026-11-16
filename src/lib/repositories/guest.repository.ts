@@ -10,6 +10,28 @@ import type { Guest, Invitation } from '@/types';
 const GUESTS_SUBCOLLECTION = 'guests';
 const INVITATIONS_SUBCOLLECTION = 'invitations';
 
+/**
+ * Converte objetos Firestore Timestamp para strings ISO.
+ * Necessário porque Timestamp não é serializável via React Server Components.
+ * Sem esta conversão, passar dados do Firestore para componentes 'use client'
+ * causa exceção de serialização em produção (digest 3209861381).
+ */
+function sanitizeFirestoreData(data: Record<string, unknown>): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(data)) {
+ if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+ try {
+ result[key] = (value as { toDate: () => Date }).toDate().toISOString();
+ } catch {
+ result[key] = null;
+ }
+ } else {
+ result[key] = value;
+ }
+	}
+	return result;
+}
+
 export interface GuestWithInvitation extends Guest {
 	invitation?: Pick<Invitation, 'id' | 'displayName' | 'maxCompanions' | 'invitationStatus'>;
 	rsvpStatus?: 'confirmed' | 'declined' | 'pending';
@@ -71,9 +93,10 @@ export async function listGuests(
  const snapshot = await query.get();
 
  // Buscar RSVPs em paralelo para enriquecer dados
+ // sanitizeFirestoreData converte Timestamp → string ISO para serialização RSC segura
  const guests = snapshot.docs.map(doc => ({
  id: doc.id,
- ...doc.data(),
+ ...sanitizeFirestoreData(doc.data() as Record<string, unknown>),
  })) as GuestWithInvitation[];
 
  // Enriquecer com status RSVP
