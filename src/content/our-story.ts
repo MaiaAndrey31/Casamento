@@ -154,10 +154,10 @@ export const OUR_STORY: OurStoryContent = {
  * Inclui fotos não usadas nos capítulos principais + bannerHero como foto destaque.
  */
 export const GALLERY_PHOTOS = [
-	{ src: '0001.png', alt: 'Andrey e Amanda — momento especial' },
-	{ src: 'bannerHero.png', alt: 'Andrey e Amanda — banner do casal' },
-	{ src: 'Abraço Romântico ao Pôr do Sol (1).png', alt: 'Abraço romântico ao pôr do sol' },
-	{ src: 'WhatsApp Image 2026-11-14 at 20.14.43.jpeg', alt: 'Andrey e Amanda — foto espontânea' },
+	{ src: '0001.webp', alt: 'Andrey e Amanda — momento especial' },
+	{ src: 'bannerHero.webp', alt: 'Andrey e Amanda — banner do casal' },
+	{ src: 'abraco-romantico.webp', alt: 'Abraço romântico ao pôr do sol' },
+	{ src: 'beijo.webp', alt: 'Andrey e Amanda — foto espontânea' },
 ] as const;
 
 /**

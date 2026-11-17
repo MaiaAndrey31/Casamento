@@ -97,7 +97,7 @@ export default async function InvitationPage({ params }: PageProps) {
 				{/* Background fotográfico real */}
 				<div className="absolute inset-0 z-0">
 					<Image
-						src={getAssetPath('bannerHero.png')}
+						src={getAssetPath('bannerHero.webp')}
 						alt="Andrey e Amanda"
 						fill
 						priority

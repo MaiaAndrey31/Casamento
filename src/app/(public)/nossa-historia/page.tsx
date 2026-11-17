@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -5,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { Heart, ArrowLeft } from 'lucide-react';
+import { Heart, ArrowLeft, Sparkles } from 'lucide-react';
 import { getAssetPath } from '@/config/wedding';
 import { OUR_STORY, GALLERY_PHOTOS } from '@/content/our-story';
 
@@ -14,30 +15,19 @@ gsap.registerPlugin(ScrollTrigger);
 /**
  * Página Nossa História — /nossa-historia
  *
- * Layout editorial sofisticado tipo álbum de memórias.
- * Container amplo (max-w-7xl ~1280px), duas colunas equilibradas,
- * fotografias grandes com enquadramento individual por orientação,
- * tipografia reforçada para leitura confortável.
- *
- * Consome exclusivamente OUR_STORY de src/content/our-story.ts.
+ * Identidade visual:
+ * Verde-floresta, dourado champanhe, marfim e tons naturais.
+ * Layout editorial com fotografias em destaque e leitura confortável.
  */
 
-/**
- * Define o aspect-ratio ideal por fotografia baseado na orientação real.
- * Fotos verticais usam containers verticais; horizontais usam containers horizontais.
- * Evita cortes de rosto e distorções.
- */
 function getImageAspect(src: string): string {
-	// Fotos conhecidas como verticais (retrato)
 	const verticalPhotos = ['001.jpeg', '002.jpeg', '003.jpeg', '005.jpeg', '008.jpeg'];
+
 	if (verticalPhotos.includes(src)) return 'aspect-[3/4]';
-	// Fotos conhecidas como horizontais (paisagem) ou quadradas
+
 	return 'aspect-[4/3]';
 }
 
-/**
- * Define object-position específico por fotografia para preservar rostos.
- */
 function getImagePosition(src: string): string {
 	const positions: Record<string, string> = {
 		'001.jpeg': 'object-center object-top',
@@ -47,6 +37,7 @@ function getImagePosition(src: string): string {
 		'008.jpeg': 'object-center object-top',
 		'010.jpeg': 'object-center',
 	};
+
 	return positions[src] || 'object-center';
 }
 
@@ -54,12 +45,15 @@ export default function NossaHistoriaPage() {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
-		const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const prefersReducedMotion = window.matchMedia(
+			'(prefers-reduced-motion: reduce)'
+		).matches;
+
 		if (prefersReducedMotion) return;
 
 		const ctx = gsap.context(() => {
-			// Título hero
 			const heroTitle = document.querySelector('[data-story-hero-title]');
+
 			if (heroTitle) {
 				gsap.from(heroTitle, {
 					y: 40,
@@ -70,6 +64,7 @@ export default function NossaHistoriaPage() {
 			}
 
 			const heroSubtitle = document.querySelector('[data-story-hero-subtitle]');
+
 			if (heroSubtitle) {
 				gsap.from(heroSubtitle, {
 					y: 25,
@@ -80,8 +75,8 @@ export default function NossaHistoriaPage() {
 				});
 			}
 
-			// Capítulos
 			const chapters = document.querySelectorAll('[data-story-chapter]');
+
 			chapters.forEach((chapter) => {
 				const textEl = chapter.querySelector('[data-chapter-text]');
 				const imageEl = chapter.querySelector('[data-chapter-image]');
@@ -141,8 +136,8 @@ export default function NossaHistoriaPage() {
 				}
 			});
 
-			// Galeria extra
 			const galleryItems = document.querySelectorAll('[data-gallery-item]');
+
 			galleryItems.forEach((item, i) => {
 				gsap.from(item, {
 					y: 30,
@@ -158,8 +153,8 @@ export default function NossaHistoriaPage() {
 				});
 			});
 
-			// Encerramento
 			const closingEl = document.querySelector('[data-story-closing]');
+
 			if (closingEl) {
 				gsap.from(closingEl, {
 					y: 30,
@@ -181,36 +176,94 @@ export default function NossaHistoriaPage() {
 	}, []);
 
 	return (
-		<div ref={containerRef} className="min-h-screen bg-surface">
-			{/* Hero */}
-			<section className="relative flex min-h-[60vh] flex-col items-center justify-center overflow-hidden px-gutter py-space-2xl text-center">
-				<div className="absolute inset-0 z-0 opacity-5">
+		<div
+			ref={containerRef}
+			className="min-h-screen overflow-hidden bg-[#14251D] text-[#F4EEE5]"
+		>
+			{/* HERO */}
+			<section className="relative flex min-h-[68vh] flex-col items-center justify-center overflow-hidden px-6 pb-20 pt-32 text-center md:min-h-[76vh] md:pt-36">
+
+				{/* Fotografia de fundo */}
+				<div className="absolute inset-0 z-0">
 					<Image
-						src={getAssetPath('bannerHero.png')}
+						src={getAssetPath('bannerHistoria.webp')}
 						alt=""
 						fill
-						className="object-cover grayscale"
+						priority
+						className="object-cover object-top opacity-[0.4] grayscale"
 						sizes="100vw"
 					/>
+
+					{/* Escurece só um pouco no topo (navbar) e funde no rodapé */}
+					<div className="absolute inset-0 bg-gradient-to-b from-[#14251D]/50 via-[#14251D]/10 to-[#14251D]" />
+
+					{/* Laterais bem suaves */}
+					<div className="absolute inset-0 bg-gradient-to-r from-[#14251D]/20 via-transparent to-[#14251D]/20" />
 				</div>
-				<div className="relative z-10 mx-auto max-w-3xl space-y-space-md">
-					<div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary-container shadow-md">
-						<Heart size={36} className="text-tertiary-fixed-dim" />
+
+				{/* Brilho decorativo */}
+				<div className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#D6A45B]/[0.045] blur-[100px]" />
+
+				<div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center">
+
+					<div className="mb-8 flex items-center gap-4">
+						<span className="h-px w-9 bg-[#D6A45B]/60" />
+						<span className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#D6A45B] md:text-[10px]">
+							Cada detalhe nos trouxe até aqui
+						</span>
+						<span className="h-px w-9 bg-[#D6A45B]/60" />
 					</div>
-					<h1 data-story-hero-title className="text-[clamp(2.5rem,6vw,4.5rem)] font-serif leading-tight text-primary">
+
+					<div className="mb-8 flex h-[76px] w-[76px] items-center justify-center rounded-full border border-[#D6A45B]/35 bg-[#D6A45B]/[0.07] shadow-[0_0_50px_rgba(214,164,91,0.08)] md:h-24 md:w-24">
+						<Heart
+							size={36}
+							strokeWidth={1.2}
+							className="text-[#E5C58D] md:h-10 md:w-10"
+						/>
+					</div>
+
+					<h1
+						data-story-hero-title
+						className="font-serif text-[clamp(3rem,8vw,6rem)] font-normal leading-[1.05] tracking-[-0.035em] text-[#F4EEE5]"
+					>
 						Nossa História
 					</h1>
-					<p data-story-hero-subtitle className="text-xl italic text-on-surface-variant md:text-2xl">
+
+					<p
+						data-story-hero-subtitle
+						className="mt-7 max-w-2xl font-serif text-lg italic leading-relaxed text-[#D4C8B5] md:text-2xl"
+					>
 						{OUR_STORY.subtitle}
 					</p>
-					<div className="mx-auto h-px w-32 bg-tertiary-fixed-dim/40" />
+
+					<div className="mt-10 flex items-center gap-3">
+						<span className="h-px w-12 bg-[#D6A45B]/40" />
+						<Sparkles size={14} className="text-[#D6A45B]/80" />
+						<span className="h-px w-12 bg-[#D6A45B]/40" />
+					</div>
 				</div>
+
+				{/* Indicador inferior */}
+				<div className="absolute bottom-0 left-1/2 h-16 w-px -translate-x-1/2 bg-gradient-to-b from-[#D6A45B]/50 to-transparent" />
 			</section>
 
-			{/* Capítulos da história — Layout editorial amplo */}
-			<section className="mx-auto max-w-7xl px-6 pb-24 md:px-12 lg:px-16">
-				<div className="space-y-20 md:space-y-28">
-					{OUR_STORY.chapters.map((chapter) => {
+			{/* CAPÍTULOS DA HISTÓRIA */}
+			<section className="relative mx-auto max-w-[1440px] px-6 pb-28 pt-16 md:px-12 md:pb-36 md:pt-24 lg:px-20">
+
+				<div className="mb-20 text-center md:mb-28">
+					<span className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#D6A45B]">
+						Um pouco de nós
+					</span>
+
+					<h2 className="mt-4 font-serif text-3xl font-normal text-[#F4EEE5] md:text-4xl">
+						Capítulos de uma vida
+					</h2>
+
+					<div className="mx-auto mt-6 h-px w-16 bg-[#D6A45B]/50" />
+				</div>
+
+				<div className="space-y-28 md:space-y-40">
+					{OUR_STORY.chapters.map((chapter, index) => {
 						const isImageRight = chapter.imagePosition === 'right';
 						const aspectClass = getImageAspect(chapter.image);
 						const positionClass = getImagePosition(chapter.image);
@@ -219,47 +272,77 @@ export default function NossaHistoriaPage() {
 							<div
 								key={chapter.id}
 								data-story-chapter
-								className={`flex flex-col gap-8 md:gap-16 lg:flex-row lg:items-start ${
-									isImageRight ? '' : 'lg:flex-row-reverse'
-								}`}
+								className={`relative flex flex-col gap-10 md:gap-14 lg:flex-row lg:items-center lg:gap-20 ${isImageRight ? '' : 'lg:flex-row-reverse'
+									}`}
 							>
-								{/* Texto */}
+								{/* TEXTO */}
 								<div
 									data-chapter-text
-									className={`flex-1 lg:max-w-[55%] ${isImageRight ? 'lg:pr-8 lg:text-left' : 'lg:pl-8 lg:text-left'}`}
+									className={`relative flex-1 lg:max-w-[50%] ${isImageRight ? 'lg:pr-4' : 'lg:pl-4'
+										}`}
 								>
-									{chapter.year && (
-										<span
-											data-chapter-year
-											className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full border-2 border-tertiary-fixed-dim bg-surface-container-lowest text-base font-bold text-primary-container shadow-sm"
-										>
-											{chapter.year}
+									<div className="mb-7 flex items-center gap-4">
+										{chapter.year ? (
+											<>
+												<span
+													data-chapter-year
+													className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-full border border-[#D6A45B]/55 bg-[#D6A45B]/[0.07] px-3 font-serif text-sm text-[#E5C58D] shadow-[0_0_25px_rgba(214,164,91,0.06)]"
+												>
+													{chapter.year}
+												</span>
+
+												<span className="h-px w-10 bg-[#D6A45B]/40" />
+											</>
+										) : (
+											<span className="h-px w-12 bg-[#D6A45B]/50" />
+										)}
+
+										<span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-[#B7A991]">
+											Capítulo {String(index + 1).padStart(2, '0')}
 										</span>
-									)}
-									<h2 className={`${chapter.year ? 'mt-3' : ''} text-[clamp(1.75rem,3.5vw,2.75rem)] font-serif leading-tight text-primary`}>
+									</div>
+
+									<h2 className="font-serif text-[clamp(2rem,4vw,3.4rem)] font-normal leading-[1.12] tracking-[-0.025em] text-[#F4EEE5]">
 										{chapter.title}
 									</h2>
-									<div className="mt-6 space-y-5 text-lg leading-[1.8] text-on-surface-variant md:text-xl md:leading-[1.85]">
+
+									<div className="mt-7 h-px w-16 bg-[#D6A45B]/50" />
+
+									<div className="mt-7 space-y-5 text-[15px] leading-[1.95] text-[#C7C8BD] md:text-[17px] md:leading-[2]">
 										{chapter.paragraphs.map((paragraph, pIndex) => (
 											<p key={pIndex}>{paragraph}</p>
 										))}
 									</div>
 								</div>
 
-								{/* Fotografia */}
+								{/* FOTOGRAFIA */}
 								<div
 									data-chapter-image
-									className={`flex-1 lg:max-w-[45%] ${isImageRight ? 'lg:pl-8' : 'lg:pr-8'}`}
+									className={`flex-1 lg:max-w-[50%] ${isImageRight ? 'lg:pl-4' : 'lg:pr-4'
+										}`}
 								>
-									<div className={`relative w-full overflow-hidden rounded-2xl border border-outline-variant/15 shadow-xl ${aspectClass}`}>
-										<Image
-											src={getAssetPath(chapter.image)}
-											alt={chapter.imageAlt}
-											fill
-											className={`object-cover ${positionClass}`}
-											sizes="(max-width: 768px) 100vw, (max-width: 1280px) 45vw, 560px"
-											loading="lazy"
-										/>
+									<div className="group relative">
+
+										{/* Moldura decorativa */}
+										<div className="absolute -bottom-3 -right-3 h-full w-full border border-[#D6A45B]/25 transition-transform duration-700 group-hover:translate-x-1 group-hover:translate-y-1 md:-bottom-4 md:-right-4" />
+
+										<div
+											className={`relative w-full overflow-hidden border border-[#D6A45B]/20 bg-[#1B3025] shadow-[0_25px_70px_rgba(0,0,0,0.28)] ${aspectClass}`}
+										>
+											<Image
+												src={getAssetPath(chapter.image)}
+												alt={chapter.imageAlt}
+												fill
+												className={`object-cover transition-transform duration-1000 group-hover:scale-[1.035] ${positionClass}`}
+												sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 600px"
+												loading="lazy"
+											/>
+
+											<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#14251D]/20 via-transparent to-transparent opacity-70" />
+										</div>
+
+										{/* Detalhe da moldura */}
+										<div className="absolute -left-2 -top-2 h-8 w-8 border-l border-t border-[#D6A45B]/60" />
 									</div>
 								</div>
 							</div>
@@ -268,55 +351,103 @@ export default function NossaHistoriaPage() {
 				</div>
 			</section>
 
-			{/* Galeria de momentos extras */}
-			<section className="bg-surface-container-low px-6 py-24 md:px-12">
-				<div className="mx-auto max-w-7xl">
-					<h2 className="mb-12 text-center text-[clamp(1.75rem,3.5vw,2.75rem)] font-serif text-primary">
-						Momentos Especiais
-					</h2>
-					<div className="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6 lg:grid-cols-4">
+			{/* GALERIA DE MOMENTOS */}
+			<section className="relative overflow-hidden border-y border-[#D6A45B]/10 bg-[#101D17] px-6 py-24 md:px-12 md:py-32">
+
+				{/* Luz de fundo */}
+				<div className="pointer-events-none absolute -right-40 top-0 h-[400px] w-[400px] rounded-full bg-[#D6A45B]/[0.035] blur-[100px]" />
+
+				<div className="relative mx-auto max-w-[1440px]">
+
+					<div className="mb-14 text-center md:mb-20">
+						<span className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#D6A45B]">
+							Fragmentos de felicidade
+						</span>
+
+						<h2 className="mt-4 font-serif text-3xl font-normal text-[#F4EEE5] md:text-5xl">
+							Momentos Especiais
+						</h2>
+
+						<p className="mx-auto mt-5 max-w-lg text-sm leading-relaxed text-[#AEB5AA] md:text-base">
+							Pequenos instantes que guardamos com carinho e que fazem parte da nossa história.
+						</p>
+
+						<div className="mx-auto mt-7 h-px w-16 bg-[#D6A45B]/50" />
+					</div>
+
+					<div className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 md:gap-6 lg:grid-cols-4">
 						{GALLERY_PHOTOS.map((photo, i) => (
 							<div
 								key={i}
 								data-gallery-item
-								className="group relative aspect-square overflow-hidden rounded-xl border border-outline-variant/15 shadow-sm transition-shadow hover:shadow-lg"
+								className="group relative aspect-square overflow-hidden border border-[#D6A45B]/15 bg-[#1B3025] shadow-[0_10px_35px_rgba(0,0,0,0.18)] transition-all duration-500 hover:-translate-y-1 hover:border-[#D6A45B]/45 hover:shadow-[0_18px_45px_rgba(0,0,0,0.3)]"
 							>
 								<Image
 									src={getAssetPath(photo.src)}
 									alt={photo.alt}
 									fill
-									className="object-cover transition-transform duration-500 group-hover:scale-105"
+									className="object-cover transition-transform duration-700 group-hover:scale-110"
 									sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
 									loading="lazy"
 								/>
+
+								<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#14251D]/35 via-transparent to-transparent opacity-60 transition-opacity duration-500 group-hover:opacity-100" />
+
+								<div className="pointer-events-none absolute inset-2 border border-white/0 transition-all duration-500 group-hover:inset-3 group-hover:border-white/30" />
 							</div>
 						))}
 					</div>
 				</div>
 			</section>
 
-			{/* Encerramento */}
-			<section data-story-closing className="mx-auto max-w-3xl px-6 py-24 text-center">
-				<div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-full bg-tertiary-fixed/20">
-					<Heart size={36} className="text-primary-container" />
+			{/* ENCERRAMENTO */}
+			<section
+				data-story-closing
+				className="relative overflow-hidden px-6 py-28 text-center md:py-36"
+			>
+				<div className="pointer-events-none absolute left-1/2 top-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#D6A45B]/[0.045] blur-[100px]" />
+
+				<div className="relative mx-auto max-w-3xl">
+
+					<div className="mx-auto mb-10 flex h-[76px] w-[76px] items-center justify-center rounded-full border border-[#D6A45B]/35 bg-[#D6A45B]/[0.07]">
+						<Heart
+							size={34}
+							strokeWidth={1.2}
+							className="text-[#E5C58D]"
+						/>
+					</div>
+
+					<span className="text-[9px] font-semibold uppercase tracking-[0.35em] text-[#D6A45B]">
+						E a nossa história continua
+					</span>
+
+					<p className="mt-8 font-serif text-[clamp(1.7rem,4vw,3rem)] font-normal italic leading-[1.45] text-[#F4EEE5]">
+						&ldquo;{OUR_STORY.closingQuote}&rdquo;
+					</p>
+
+					<div className="mx-auto mt-9 h-px w-16 bg-[#D6A45B]/50" />
+
+					<p className="mt-8 font-serif text-2xl text-[#E5C58D] md:text-3xl">
+						{OUR_STORY.signature}
+					</p>
+
+					<p className="mt-4 text-[9px] font-medium uppercase tracking-[0.3em] text-[#B7A991]">
+						{OUR_STORY.closingVerseReference}
+					</p>
+
+					<div className="mt-14">
+						<Link
+							href="/"
+							className="group inline-flex min-h-[54px] items-center justify-center gap-3 border border-[#D6A45B]/45 bg-[#D6A45B]/[0.06] px-8 py-4 text-[9px] font-semibold uppercase tracking-[0.22em] text-[#E5C58D] transition-all duration-300 hover:border-[#D6A45B] hover:bg-[#D6A45B] hover:text-[#14251D] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D6A45B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#14251D]"
+						>
+							<ArrowLeft
+								size={15}
+								className="transition-transform duration-300 group-hover:-translate-x-1"
+							/>
+							Voltar ao Convite
+						</Link>
+					</div>
 				</div>
-				<p className="text-[clamp(1.5rem,3vw,2.25rem)] font-serif italic leading-snug text-primary">
-					&ldquo;{OUR_STORY.closingQuote}&rdquo;
-				</p>
-				<p className="mt-6 text-2xl font-serif text-primary-container">
-					{OUR_STORY.signature}
-				</p>
-				<p className="mt-3 text-sm uppercase tracking-widest text-tertiary-fixed-dim/90">
-					{OUR_STORY.closingVerseReference}
-				</p>
-				<div className="mx-auto mt-12 h-px w-32 bg-tertiary-fixed-dim/40" />
-				<Link
-					href="/"
-					className="mt-12 inline-flex items-center gap-2 rounded-md border border-outline-variant/30 bg-surface-container-lowest px-8 py-4 text-label-md uppercase tracking-widest text-primary transition-colors hover:bg-surface-container-low focus:outline-none focus:ring-2 focus:ring-tertiary-fixed-dim"
-				>
-					<ArrowLeft size={16} />
-					Voltar ao Convite
-				</Link>
 			</section>
 		</div>
 	);

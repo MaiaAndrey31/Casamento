@@ -90,7 +90,7 @@ export function DigitalCard({ displayName, attendanceStatus, confirmedGuests, ch
 				{/* Header com foto */}
 				<div className="relative h-32 overflow-hidden">
 					<Image
-						src={getAssetPath('Abraço Romântico ao Pôr do Sol (1).png')}
+						src={getAssetPath('abraco-romantico.webp')}
 						alt=""
 						fill
 						className="object-cover"

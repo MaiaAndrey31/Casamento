@@ -36,10 +36,10 @@ export default async function AdminGaleriaPage() {
 
 	// Fotos estáticas existentes em public/assets/
 	const staticPhotos = [
-		{ src: '/assets/bannerHero.png', alt: 'Banner Hero do casamento', category: 'hero' },
-		{ src: '/assets/Abraço Romântico ao Pôr do Sol (1).png', alt: 'Abraço ao pôr do sol', category: 'closing' },
-		{ src: '/assets/image.png', alt: 'Ensaio do casal', category: 'story' },
-		{ src: '/assets/WhatsApp Image 2026-11-14 at 20.14.43.jpeg', alt: 'Foto espontânea', category: 'gallery' },
+		{ src: '/assets/bannerHero.webp', alt: 'Banner Hero do casamento', category: 'hero' },
+		{ src: '/assets/abraco-romantico.webp', alt: 'Abraço ao pôr do sol', category: 'closing' },
+		{ src: '/assets/casal-ensaio.webp', alt: 'Ensaio do casal', category: 'story' },
+		{ src: '/assets/beijo.webp', alt: 'Foto espontânea', category: 'gallery' },
 	];
 
 	return (
