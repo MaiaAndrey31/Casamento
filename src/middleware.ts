@@ -24,9 +24,20 @@ export function middleware(request: NextRequest) {
  }
 	}
 
+	// Proteger todas as rotas /validador/* exceto /validador/login e /api/validator/*
+	if (pathname.startsWith('/validador') && pathname !== '/validador/login') {
+ const sessionCookie = request.cookies.get('__session')?.value;
+
+ if (!sessionCookie) {
+ const loginUrl = new URL('/validador/login', request.url);
+ loginUrl.searchParams.set('redirect', pathname);
+ return NextResponse.redirect(loginUrl);
+ }
+	}
+
 	return NextResponse.next();
 }
 
 export const config = {
-	matcher: ['/admin/:path*'],
+	matcher: ['/admin/:path*', '/validador/:path*'],
 };

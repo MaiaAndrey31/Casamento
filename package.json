@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
@@ -31,10 +33,13 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
+    "@vitejs/plugin-react": "^6.3.0",
     "eslint": "^9.28.0",
     "eslint-config-next": "^15.3.3",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.8",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^5.1.0"
   }
 }

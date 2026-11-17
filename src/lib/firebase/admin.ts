@@ -92,6 +92,37 @@ export async function isAdmin(uid: string): Promise<boolean> {
 }
 
 /**
+ * Obtém o perfil completo do admin/validador.
+ * Retorna null se o documento não existir.
+ *
+ * COMPATIBILIDADE COM LEGADOS:
+ * - Documentos sem `type` → tratados como `type: 'admin'`
+ * - Documentos sem `role` mas com `active: true` → tratados como `role: 'owner'`
+ *   (preserva acesso dos primeiros admins criados via seed antes do campo role existir)
+ */
+export async function getAdminProfile(
+  uid: string,
+): Promise<{ role: import('@/types').AdminRole; type: import('@/types').AccountType; active: boolean } | null> {
+  try {
+    const doc = await adminDb.collection('admins').doc(uid).get();
+    if (!doc.exists) return null;
+
+    const data = doc.data();
+    const active = Boolean(data?.active);
+
+    // Legado: sem role definido → owner (primeiros admins)
+    const role = (data?.role as import('@/types').AdminRole) || 'owner';
+
+    // Legado: sem type definido → admin
+    const type = (data?.type as import('@/types').AccountType) || 'admin';
+
+    return { role, type, active };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verifica token de ID do Firebase e retorna o UID se válido.
  * Lança erro se o token for inválido ou expirado.
  */

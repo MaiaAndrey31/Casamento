@@ -190,15 +190,49 @@ export interface AuditLog {
 // ADMIN
 // ============================================================================
 
-export type AdminRole = 'owner' | 'editor' | 'viewer';
+export type AdminRole = 'owner' | 'editor' | 'viewer' | 'checkin_operator';
+export type AccountType = 'admin' | 'validator';
 
 export interface Admin {
   uid: string;
   email: string;
   displayName: string;
   role: AdminRole;
+  type: AccountType;
   active: boolean;
   createdAt: string;
+}
+
+// ============================================================================
+// CHECK-IN PARTICIPANTE
+// ============================================================================
+
+/**
+ * Participante individual de um convite para fins de check-in.
+ * O participantId é imutável e persistente:
+ * - Titular: usa o guestId existente
+ * - Acompanhante: UUID gerado uma única vez na migração ou criação
+ */
+export interface CheckInParticipant {
+  participantId: string;
+  name: string;
+  type: 'titular' | 'companion';
+  isMinor: boolean;
+  age?: number;
+  checkedIn: boolean;
+  checkedInAt?: string;
+  checkedInBy?: string;
+}
+
+/**
+ * Companion com ID persistente armazenado no RSVP.
+ * Substitui CompanionInfo legado gradualmente via migração idempotente.
+ */
+export interface CompanionWithId {
+  participantId: string;
+  name: string;
+  isMinor: boolean;
+  age?: number;
 }
 
 // ============================================================================
