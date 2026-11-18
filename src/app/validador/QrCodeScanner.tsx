@@ -144,12 +144,19 @@ export function QrCodeScanner() {
 			return;
 		}
 
+		// LOTE 2 (§6): O campo error pode conter um aviso não-bloqueante
+		// (ex: RSVP pendente/recusado) quando há dados válidos com participantes.
+		// Exibir como aviso no painel de resultado, NÃO como erro fatal.
+		if (result.data.participants.length > 0 && result.error) {
+			setErrorMessage(result.error); // Aviso não-bloqueante exibido no painel
+		}
+
 		setValidationResult(result.data);
 
-		// Pré-selecionar participantes que ainda não entraram
+		// Pré-selecionar apenas participantes pendentes com ID válido (não vazios)
 		const pendingIds = new Set<string>();
 		for (const p of result.data.participants) {
-			if (!p.checkedIn) {
+			if (!p.checkedIn && p.participantId) {
 				pendingIds.add(p.participantId);
 			}
 		}
@@ -365,6 +372,14 @@ export function QrCodeScanner() {
 							</span>
 						</div>
 					</div>
+
+			{/* LOTE 2 (§6): Aviso RSVP não-confirmado (não-bloqueante) */}
+			{errorMessage && state === 'result' && (
+				<div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4">
+					<AlertCircle size={20} className="shrink-0 text-orange-600" />
+					<p className="text-xs font-medium leading-relaxed text-orange-800">{errorMessage}</p>
+				</div>
+			)}
 
 					{/* Lista de participantes */}
 					<div className="rounded-xl border border-[#17291F]/10 bg-white shadow-sm">

@@ -333,24 +333,28 @@ describe('performParticipantCheckIn — Lógica Transacional', () => {
 		expect(result.error).toContain('revogado');
 	});
 
-	it('4. RSVP pendente deve bloquear check-in', async () => {
+	// LOTE 2 (§6): RSVP pendente NÃO bloqueia mais o check-in na transação.
+	// A validação de autorização do participante e do convite permanece obrigatória,
+	// mas o RSVP confirmado não é mais requisito para registrar entrada.
+	it('4. RSVP pendente permite check-in (Lote 2 §6)', async () => {
 		seedTestData({ rsvpStatus: 'pending' });
 
 		const { performParticipantCheckIn } = await getRepository();
 		const result = await performParticipantCheckIn('test-event', 'inv-001', 'guest-titular', 'op-1');
 
-		expect(result.success).toBe(false);
-		expect(result.error).toContain('não confirmada');
+		expect(result.success).toBe(true);
+		expect(result.alreadyCheckedIn).toBe(false);
 	});
 
-	it('5. RSVP recusado deve bloquear check-in', async () => {
+	// LOTE 2 (§6): RSVP recusado NÃO bloqueia mais o check-in na transação.
+	it('5. RSVP recusado permite check-in (Lote 2 §6)', async () => {
 		seedTestData({ rsvpStatus: 'declined' });
 
 		const { performParticipantCheckIn } = await getRepository();
 		const result = await performParticipantCheckIn('test-event', 'inv-001', 'guest-titular', 'op-1');
 
-		expect(result.success).toBe(false);
-		expect(result.error).toContain('não confirmada');
+		expect(result.success).toBe(true);
+		expect(result.alreadyCheckedIn).toBe(false);
 	});
 
 	it('6. Participante não pertencente ao convite deve ser rejeitado', async () => {

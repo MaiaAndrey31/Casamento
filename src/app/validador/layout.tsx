@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ShieldCheck, LogOut, QrCode, Users } from 'lucide-react';
+import { ShieldCheck, LogOut, QrCode, Users, GraduationCap } from 'lucide-react';
 
 export const metadata: Metadata = {
 	title: 'Painel do Validador — Casamento Andrey & Amanda',
@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 const navItems = [
 	{ href: '/validador', label: 'Leitor QR', icon: QrCode },
 	{ href: '/validador/confirmados', label: 'Confirmados', icon: Users },
+	{ href: '/validador/treinamento', label: 'Treino', icon: GraduationCap },
 ];
 
 /**

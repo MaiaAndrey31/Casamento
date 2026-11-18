@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Heart, Users, CheckCircle, MessageSquareHeart, Image as ImageIcon, Settings, LogOut } from 'lucide-react';
+import { Heart, Users, CheckCircle, MessageSquareHeart, Image as ImageIcon, Settings, LogOut, ShieldCheck } from 'lucide-react';
 
 export const metadata: Metadata = {
 	title: 'Painel Administrativo — Casamento Andrey & Amanda',
@@ -14,6 +14,7 @@ const navItems = [
 	{ href: '/admin/recados', label: 'Recados', icon: MessageSquareHeart },
 	{ href: '/admin/galeria', label: 'Galeria', icon: ImageIcon },
 	{ href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
+	{ href: '/admin/check-in', label: 'Check-in', icon: ShieldCheck },
 ];
 
 export default function AdminLayout({
