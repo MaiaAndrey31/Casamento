@@ -1,108 +1,56 @@
 'use server';
 
 /**
- * Server Action — Check-in de Convidados
+ * Server Actions de Check-in — DESATIVADAS (Etapa 5)
  *
- * Valida token opaco do QR Code, verifica convite e registra entrada via transação.
- * Suporta check-in por QR Code e busca manual por nome.
+ * Estas funções foram substituídas pelo serviço transacional seguro em
+ * validator-checkin.action.ts. O fluxo antigo (/admin/check-in) foi
+ * convertido em redirecionamento para /validador.
+ *
+ * MOTIVO DA DESATIVAÇÃO:
+ * - performCheckIn() usava seleção automática do primeiro guest (inseguro)
+ * - performCheckIn() usava count().get() dentro de transação (incompatível)
+ * - performManualCheckIn() não usava transação (duplicidade possível)
+ * - searchGuestForCheckIn() fazia N+1 queries (lento)
+ * - Nenhum suporte a IDs persistentes de acompanhantes
+ *
+ * Todas as chamadas agora retornam erro controlado direcionando para o novo fluxo.
+ * Arquivo preservado para evitar breaking changes em imports existentes.
  */
 
-import { requireAdminSession } from '@/lib/auth/admin-session';
-import { performCheckIn, searchGuestForCheckIn, performManualCheckIn, type CheckInResult } from '@/lib/repositories/checkin.repository';
 import type { ApiResponse } from '@/types';
 
+const DEPRECATED_ERROR = 'Este endpoint foi desativado. Utilize o painel do validador em /validador para realizar check-ins com segurança.';
+
 /**
- * Realiza check-in via QR Code (token opaco).
+ * @deprecated Use validateQrCodeAction + checkInParticipantAction from validator-checkin.action.ts
  */
 export async function checkInByQrCode(
-	eventId: string,
-	qrCodeData: string,
-): Promise<ApiResponse<CheckInResult>> {
-	// 1. Verificar sessão administrativa
-	let session;
-	try {
- session = await requireAdminSession();
-	} catch {
- return { success: false, error: 'Sessão administrativa inválida. Faça login novamente.' };
-	}
-
-	// 2. Validar formato do QR Code
-	if (!qrCodeData || qrCodeData.length < 8) {
- return { success: false, error: 'QR Code inválido ou ilegível.' };
-	}
-
-	// 3. Extrair token do QR Code (pode ser URL completa ou token puro)
-	let token = qrCodeData;
-	try {
- const url = new URL(qrCodeData);
- token = url.searchParams.get('t') || url.searchParams.get('token') || qrCodeData;
-	} catch {
- // Não é URL, usar como token direto
-	}
-
-	// 4. Executar check-in
-	const result = await performCheckIn(eventId, token, session.uid);
-
-	if (!result.success) {
- return {
- success: false,
- data: result,
- error: result.error,
- };
-	}
-
-	return {
- success: true,
- data: result,
- message: `✅ ${result.guestName} (${result.invitationDisplayName}) — Check-in realizado!`,
-	};
+	_eventId: string,
+	_qrCodeData: string,
+): Promise<ApiResponse> {
+	console.warn('[CheckInAction DEPRECATED] checkInByQrCode chamada — redirecionar para /validador');
+	return { success: false, error: DEPRECATED_ERROR };
 }
 
 /**
- * Busca convidados por nome para check-in manual.
+ * @deprecated Use searchGuestsAction from validator-checkin.action.ts
  */
 export async function searchGuestsForCheckIn(
-	eventId: string,
-	searchTerm: string,
-): Promise<ApiResponse<Array<{ id: string; fullName: string; invitationDisplayName: string; checkedIn: boolean }>>> {
-	// Verificar sessão
-	try {
- await requireAdminSession();
-	} catch {
- return { success: false, error: 'Sessão administrativa inválida.' };
-	}
-
-	if (!searchTerm || searchTerm.length < 2) {
- return { success: true, data: [] };
-	}
-
-	const results = await searchGuestForCheckIn(eventId, searchTerm);
-	return { success: true, data: results };
+	_eventId: string,
+	_searchTerm: string,
+): Promise<ApiResponse> {
+	console.warn('[CheckInAction DEPRECATED] searchGuestsForCheckIn chamada — redirecionar para /validador');
+	return { success: false, error: DEPRECATED_ERROR };
 }
 
 /**
- * Realiza check-in manual por ID do convidado.
+ * @deprecated Use manualCheckInAction from validator-checkin.action.ts
  */
 export async function checkInManually(
-	eventId: string,
-	guestId: string,
-): Promise<ApiResponse<CheckInResult>> {
-	let session;
-	try {
- session = await requireAdminSession();
-	} catch {
- return { success: false, error: 'Sessão administrativa inválida.' };
-	}
-
-	const result = await performManualCheckIn(eventId, guestId, session.uid);
-
-	if (!result.success) {
- return { success: false, data: result, error: result.error };
-	}
-
-	return {
- success: true,
- data: result,
- message: `✅ ${result.guestName} (${result.invitationDisplayName}) — Check-in manual realizado!`,
-	};
+	_eventId: string,
+	_guestId: string,
+): Promise<ApiResponse> {
+	console.warn('[CheckInAction DEPRECATED] checkInManually chamada — redirecionar para /validador');
+	return { success: false, error: DEPRECATED_ERROR };
 }

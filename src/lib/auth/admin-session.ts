@@ -12,6 +12,9 @@
  * COMPATIBILIDADE: documentos legados sem `type` são tratados como `type: 'admin'`.
  * Documentos sem `role` mas com `active: true` são tratados como `role: 'owner'`
  * para preservar acesso dos primeiros administradores criados via seed.
+ *
+ * SEGURANÇA (Etapa 3): validadores exigem AMBOS type === 'validator' E
+ * role === 'checkin_operator'. Combinações inconsistentes são rejeitadas.
  */
 
 import { cookies } from 'next/headers';
@@ -30,31 +33,31 @@ export interface AdminSession {
  */
 export async function getAdminSession(): Promise<AdminSession | null> {
 	try {
- const cookieStore = await cookies();
- const sessionToken = cookieStore.get('__session')?.value;
+		const cookieStore = await cookies();
+		const sessionToken = cookieStore.get('__session')?.value;
 
- if (!sessionToken) return null;
+		if (!sessionToken) return null;
 
- const { adminAuth, getAdminProfile } = await import('@/lib/firebase/admin');
+		const { adminAuth, getAdminProfile } = await import('@/lib/firebase/admin');
 
- // Verificar token de ID
- const decoded = await adminAuth.verifyIdToken(sessionToken);
+		// Verificar token de ID
+		const decoded = await adminAuth.verifyIdToken(sessionToken);
 
- // Obter perfil completo do admin
- const profile = await getAdminProfile(decoded.uid);
- if (!profile || !profile.active) return null;
+		// Obter perfil completo do admin
+		const profile = await getAdminProfile(decoded.uid);
+		if (!profile || !profile.active) return null;
 
- // Apenas contas tipo 'admin' passam nesta verificação
- if (profile.type !== 'admin') return null;
+		// Apenas contas tipo 'admin' passam nesta verificação
+		if (profile.type !== 'admin') return null;
 
- return {
- uid: decoded.uid,
- email: decoded.email || '',
- role: profile.role,
- type: profile.type,
- };
+		return {
+			uid: decoded.uid,
+			email: decoded.email || '',
+			role: profile.role,
+			type: profile.type,
+		};
 	} catch {
- return null;
+		return null;
 	}
 }
 
@@ -66,7 +69,7 @@ export async function requireAdminSession(): Promise<AdminSession> {
 	const session = await getAdminSession();
 
 	if (!session) {
- throw new Error('UNAUTHORIZED: Sessão administrativa inválida ou expirada.');
+		throw new Error('UNAUTHORIZED: Sessão administrativa inválida ou expirada.');
 	}
 
 	return session;
@@ -76,44 +79,52 @@ export async function requireAdminSession(): Promise<AdminSession> {
  * Obtém a sessão de validador (checkin_operator) OU admin owner.
  * Noivos (owner) têm acesso total; validadores têm acesso restrito.
  * Retorna null se não houver sessão válida ou permissão insuficiente.
+ *
+ * REGRAS DE AUTORIZAÇÃO (Etapa 3):
+ * - Owner (type=admin, role=owner): acesso total ao painel do validador
+ * - Validador (type=validator, role=checkin_operator): acesso restrito
+ * - Combinações inconsistentes são REJEITADAS (ex: type=validator sem role=checkin_operator)
+ * - Editor/viewer/admin sem owner NÃO têm acesso ao painel do validador
  */
 export async function getValidatorSession(): Promise<AdminSession | null> {
 	try {
- const cookieStore = await cookies();
- const sessionToken = cookieStore.get('__session')?.value;
+		const cookieStore = await cookies();
+		const sessionToken = cookieStore.get('__session')?.value;
 
- if (!sessionToken) return null;
+		if (!sessionToken) return null;
 
- const { adminAuth, getAdminProfile } = await import('@/lib/firebase/admin');
+		const { adminAuth, getAdminProfile } = await import('@/lib/firebase/admin');
 
- const decoded = await adminAuth.verifyIdToken(sessionToken);
- const profile = await getAdminProfile(decoded.uid);
+		const decoded = await adminAuth.verifyIdToken(sessionToken);
+		const profile = await getAdminProfile(decoded.uid);
 
- if (!profile || !profile.active) return null;
+		if (!profile || !profile.active) return null;
 
- // Owner tem acesso total (inclui painel do validador)
- if (profile.role === 'owner') {
- return {
- uid: decoded.uid,
- email: decoded.email || '',
- role: profile.role,
- type: profile.type,
- };
- }
+		// Owner (admin) tem acesso total ao painel do validador
+		if (profile.type === 'admin' && profile.role === 'owner') {
+			return {
+				uid: decoded.uid,
+				email: decoded.email || '',
+				role: profile.role,
+				type: profile.type,
+			};
+		}
 
- // Checkin operator ou validator type
- if (profile.role === 'checkin_operator' || profile.type === 'validator') {
- return {
- uid: decoded.uid,
- email: decoded.email || '',
- role: profile.role,
- type: profile.type,
- };
- }
+		// Validador: exige AMBOS type === 'validator' E role === 'checkin_operator'
+		// Rejeita combinações inconsistentes (ex: type=validator sem role, ou role=checkin_operator sem type=validator)
+		if (profile.type === 'validator' && profile.role === 'checkin_operator') {
+			return {
+				uid: decoded.uid,
+				email: decoded.email || '',
+				role: profile.role,
+				type: profile.type,
+			};
+		}
 
- return null;
+		// Qualquer outra combinação é rejeitada (editor, viewer, admin sem owner, etc.)
+		return null;
 	} catch {
- return null;
+		return null;
 	}
 }
 
@@ -125,7 +136,7 @@ export async function requireValidatorSession(): Promise<AdminSession> {
 	const session = await getValidatorSession();
 
 	if (!session) {
- throw new Error('UNAUTHORIZED: Sessão de validador inválida ou sem permissão de check-in.');
+		throw new Error('UNAUTHORIZED: Sessão de validador inválida ou sem permissão de check-in.');
 	}
 
 	return session;

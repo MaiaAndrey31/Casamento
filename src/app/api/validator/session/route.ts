@@ -74,13 +74,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 			);
 		}
 
-		// Validar permissão: owner, checkin_operator ou validator type
-		const isAuthorized =
-			profile.role === 'owner' ||
-			profile.role === 'checkin_operator' ||
-			profile.type === 'validator';
+		// Validar permissão com regras estritas (Etapa 3):
+		// - Owner (type=admin, role=owner): acesso total
+		// - Validador (type=validator, role=checkin_operator): acesso restrito
+		// - Combinações inconsistentes são REJEITADAS
+		const isOwner = profile.type === 'admin' && profile.role === 'owner';
+		const isValidValidator = profile.type === 'validator' && profile.role === 'checkin_operator';
 
-		if (!isAuthorized) {
+		if (!isOwner && !isValidValidator) {
 			return NextResponse.json(
 				{ success: false, error: 'Seu usuário não possui permissão de validador.' },
 				{ status: 403 },
