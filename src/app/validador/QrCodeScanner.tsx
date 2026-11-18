@@ -131,27 +131,72 @@ export function QrCodeScanner() {
 					return;
 				}
 
-				await scanner.start(
-					{ facingMode: 'environment' },
-					{
-						fps: 10,
-						qrbox: { width: 250, height: 250 },
-						aspectRatio: 1.0,
-					},
-					async (decodedText) => {
-						if (processingRef.current) return;
-						processingRef.current = true;
+				// Configuração comum do scanner
+				const scannerConfig = {
+					fps: 10,
+					qrbox: { width: 250, height: 250 },
+					aspectRatio: 1.0,
+				};
 
-						// Parar scanner antes de processar para liberar câmera
-						await cleanupScanner();
-						if (isMountedRef.current) {
-							await handleQrCodeRead(decodedText);
+				// Callbacks comuns
+				const onScanSuccess = async (decodedText: string) => {
+					if (processingRef.current) return;
+					processingRef.current = true;
+					await cleanupScanner();
+					if (isMountedRef.current) {
+						await handleQrCodeRead(decodedText);
+					}
+				};
+				const onScanFailure = () => {}; // Ignorar erros por frame (normal)
+
+				// ESTRATÉGIA DE FALLBACK EM CASCATA PARA COMPATIBILIDADE MOBILE:
+				// 1. Tentar facingMode: 'environment' (câmera traseira preferida)
+				// 2. Se falhar com NotFoundError/OverconstrainedError, tentar sem constraints (câmera padrão)
+				// 3. Só reportar erro se ambas as tentativas falharem
+				try {
+					await scanner.start(
+						{ facingMode: 'environment' },
+						scannerConfig,
+						onScanSuccess,
+						onScanFailure,
+					);
+				} catch (firstError) {
+					if (cancelled || !isMountedRef.current) throw firstError;
+
+					const firstMsg = firstError instanceof Error ? firstError.message : String(firstError);
+					const isDeviceConstraintError =
+						firstMsg.includes('NotFoundError') ||
+						firstMsg.includes('OverconstrainedError') ||
+						firstMsg.includes('not found') ||
+						firstMsg.includes('No video input') ||
+						firstMsg.includes('Could not start video source');
+
+					if (isDeviceConstraintError) {
+						// Fallback: tentar sem constraints específicas (câmera padrão do dispositivo)
+						console.warn('[QrScanner] facingMode:environment falhou, tentando fallback sem constraints:', firstMsg);
+						try {
+							// Limpar e recriar instância para tentativa limpa
+							try { await scanner.stop().catch(() => {}); } catch {}
+							try { scanner.clear(); } catch {}
+
+							const fallbackScanner = new Html5Qrcode('qr-scanner-container');
+							html5QrCodeRef.current = fallbackScanner;
+
+							await fallbackScanner.start(
+								{}, // Sem constraints — usa câmera padrão disponível
+								scannerConfig,
+								onScanSuccess,
+								onScanFailure,
+							);
+						} catch (fallbackError) {
+							// Ambas as tentativas falharam — propagar erro original para diagnóstico correto
+							throw fallbackError;
 						}
-					},
-					() => {
-						// Callback de erro de scan por frame — ignorar (normal durante busca)
-					},
-				);
+					} else {
+						// Erro não relacionado a dispositivo (permissão, HTTPS, etc.) — propagar diretamente
+						throw firstError;
+					}
+				}
 			} catch (e) {
 				if (cancelled || !isMountedRef.current) return;
 
@@ -162,7 +207,7 @@ export function QrCodeScanner() {
 				if (message.includes('Permission') || message.includes('NotAllowedError') || message.includes('permission')) {
 					errorMsg = 'Permissão de câmera negada. Habilite nas configurações do navegador e tente novamente.';
 				} else if (message.includes('NotFoundError') || message.includes('not found') || message.includes('No video input')) {
-					errorMsg = 'Nenhuma câmera encontrada neste dispositivo. Verifique se há uma câmera conectada.';
+					errorMsg = 'Nenhuma câmera encontrada neste dispositivo. Verifique se há uma câmera conectada e se o navegador tem permissão para acessá-la.';
 				} else if (message.includes('NotReadableError') || message.includes('not readable') || message.includes('Could not start') || message.includes('OverconstrainedError')) {
 					errorMsg = 'A câmera está em uso por outro aplicativo ou não pôde ser acessada. Feche outros apps que usam a câmera e tente novamente.';
 				} else if (message.includes('AbortError') || message.includes('aborted')) {
