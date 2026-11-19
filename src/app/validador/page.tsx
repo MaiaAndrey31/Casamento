@@ -3,11 +3,14 @@ import { redirect } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import { QrCodeScanner } from './QrCodeScanner';
 import { ReceptionSummaryServer } from './ReceptionSummaryServer';
+import { ScannerErrorBoundary } from './ScannerErrorBoundary';
 
 /**
  * Painel do Validador — /validador (Etapa 4)
  *
  * Leitor de QR Code funcional + Resumo da Recepção em tempo real.
+ * O scanner é isolado por ScannerErrorBoundary para impedir que falhas
+ * de câmera derrubem toda a aplicação (§5 da correção crítica).
  *
  * SEGURANÇA: verifica sessão de validador no servidor.
  */
@@ -38,8 +41,10 @@ export default async function ValidatorDashboardPage() {
 			{/* Resumo da Recepção (server component com dados iniciais) */}
 			<ReceptionSummaryServer />
 
-			{/* Leitor de QR Code + Painel de Check-in */}
-			<QrCodeScanner />
+			{/* Leitor de QR Code + Painel de Check-in (isolado por Error Boundary) */}
+			<ScannerErrorBoundary>
+				<QrCodeScanner />
+			</ScannerErrorBoundary>
 		</div>
 	);
 }

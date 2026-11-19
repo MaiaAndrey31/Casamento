@@ -82,11 +82,33 @@ export function QrCodeScanner() {
  }
 	}, []);
 
-	// Lifecycle: marcar montado/desmontado + cleanup
+	// Lifecycle: marcar montado/desmontado + cleanup + captura de erros globais
 	useEffect(() => {
  isMountedRef.current = true;
+
+ // CORREÇÃO CRÍTICA: Capturar unhandled rejections que ocorrem dentro de callbacks
+ // da biblioteca html5-qrcode (contexto externo ao React). Sem isso, uma promise
+ // rejeitada dentro do onScanSuccess ou em timers internos da biblioteca causa
+ // "Application error: a client-side exception has occurred" no Chrome Android.
+ const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+ const reason = event.reason;
+ const msg = reason instanceof Error ? reason.message : String(reason);
+ // Filtrar apenas erros relacionados ao scanner/câmera para não mascarar outros bugs
+ if (msg.includes('Html5Qrcode') || msg.includes('scanner') || msg.includes('camera') ||
+ msg.includes('video') || msg.includes('stream') || msg.includes('getUserMedia') ||
+ msg.includes('NotAllowedError') || msg.includes('NotFoundError') ||
+ msg.includes('NotReadableError') || msg.includes('OverconstrainedError')) {
+ console.error('[QrScanner] Unhandled rejection capturada:', msg);
+ logDebug('UNHANDLED_REJECTION', msg.substring(0, 200));
+ event.preventDefault(); // Impedir que derrube a aplicação
+ }
+ };
+
+ window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
  return () => {
  isMountedRef.current = false;
+ window.removeEventListener('unhandledrejection', handleUnhandledRejection);
  cleanupScanner();
  };
 	}, []);
@@ -175,7 +197,12 @@ export function QrCodeScanner() {
  verbose: false,
  };
 
+ // CORREÇÃO CRÍTICA: O callback onScanSuccess é chamado pelo html5-qrcode
+ // em contexto assíncrono externo ao React. Qualquer exceção não capturada
+ // aqui causa unhandled rejection que derruba a aplicação no Chrome Android.
+ // TODO o corpo do callback DEVE estar dentro de try/catch.
  const onScanSuccess = async (decodedText: string) => {
+ try {
  if (processingRef.current) return;
  processingRef.current = true;
  logDebug('SCAN_SUCCESS', 'QR Code detectado');
@@ -183,8 +210,16 @@ export function QrCodeScanner() {
  if (isMountedRef.current) {
  await handleQrCodeRead(decodedText);
  }
+ } catch (scanError) {
+ // Capturar qualquer erro dentro do callback para impedir crash da aplicação
+ console.error('[QrScanner] Erro no callback onScanSuccess:', scanError);
+ logDebug('SCAN_CALLBACK_ERROR', scanError instanceof Error ? scanError.message : String(scanError));
+ processingRef.current = false;
+ // Não mudar estado para error aqui — o scanner já parou via cleanupScanner.
+ // O usuário pode tocar em "Escanear Próximo" ou "Tentar Novamente".
+ }
  };
- const onScanFailure = () => {}; // Ignorar erros por frame
+ const onScanFailure = () => {}; // Ignorar erros por frame (normal durante busca)
 
  // ESTRATÉGIA DE INICIALIZAÇÃO EM CASCATA:
  // 1. facingMode: 'environment' (câmera traseira)
