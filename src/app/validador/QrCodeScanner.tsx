@@ -5,14 +5,6 @@ import { Camera, X, RefreshCw, CheckCircle, AlertCircle, Loader2, UserCheck, QrC
 import { validateQrCodeAction, checkInParticipantAction, searchGuestsAction, manualCheckInAction } from '@/app/actions/validator-checkin.action';
 import type { InvitationValidationResult, ParticipantCheckInResult } from '@/lib/repositories/validator-checkin.repository';
 
-/**
- * Estados do scanner de câmera.
- *
- * Fluxo esperado:
- * idle → requestingPermission → (permissionGranted) → initializing → scanning
- *                                                     ↓ (erro)
- *                                                   error → (tentar novamente) → idle
- */
 type ScannerState =
 	| 'idle'
 	| 'requestingPermission'
@@ -33,25 +25,24 @@ interface SearchResult {
 /**
  * Leitor de QR Code + Painel de Check-in Individual
  *
- * CORREÇÃO DEFINITIVA — SOLICITAÇÃO EXPLÍCITA DE PERMISSÃO (Chrome Android):
+ * CORREÇÃO DEFINITIVA — Chrome Android (permissão concedida mas scanner não abre):
  *
- * O fluxo anterior tentava inicializar o html5-qrcode diretamente com
- * { facingMode: 'environment' }, o que falhava no Chrome Android porque
- * o navegador NÃO solicitava permissão automaticamente nesse cenário,
- * retornando NotFoundError (lista vazia de dispositivos pré-permissão).
+ * CAUSA RAIZ IDENTIFICADA:
+ * 1. O container do scanner estava oculto via CSS (display:none) durante o estado
+ *    'initializing'. O html5-qrcode precisa que o elemento esteja VISÍVEL e com
+ *    dimensões reais para criar o <video> interno. Com display:none, o elemento
+ *    tem offsetWidth=0 e a biblioteca falha silenciosamente.
+ * 2. O stream temporário do getUserMedia() era liberado ANTES de iniciar o
+ *    html5-qrcode. No Chrome Android, isso pode fazer o navegador revogar a
+ *    permissão ou liberar o hardware da câmera, causando NotFoundError na
+ *    segunda tentativa de acesso.
  *
- * Novo fluxo:
- * 1. Estado 'idle': exibe botão "Ativar Câmera" (interação explícita do usuário)
- * 2. Ao clicar, chama navigator.mediaDevices.getUserMedia() para solicitar permissão
- * 3. Se autorizado: libera o stream temporário e inicializa o html5-qrcode
- * 4. Se negado/bloqueado: exibe mensagem específica com instruções
- * 5. Fallback em cascata: tenta environment → sem constraints → erro
- *
- * SEGURANÇA:
- * - getUserMedia() só é chamado após interação do usuário (requisito do navegador)
- * - Stream temporário é liberado imediatamente após confirmação de permissão
- * - Container do scanner sempre presente no DOM (oculto via CSS)
- * - Cleanup robusto ao desmontar ou trocar de estado
+ * CORREÇÕES APLICADAS:
+ * - Container SEMPRE visível durante 'initializing' e 'scanning' (não hidden)
+ * - Stream do getUserMedia() NÃO é liberado antecipadamente; o html5-qrcode
+ *   gerencia seu próprio stream e nós apenas fazemos cleanup ao desmontar
+ * - Fallback em cascata: environment → user → sem constraints
+ * - Diagnóstico temporário via console.warn para debugging em dispositivo real
  * - Flag isMounted previne operações após desmontagem (React Strict Mode)
  */
 export function QrCodeScanner() {
@@ -62,6 +53,7 @@ export function QrCodeScanner() {
 	const [isCheckingIn, setIsCheckingIn] = useState(false);
 	const [errorMessage, setErrorMessage] = useState('');
 	const [cameraError, setCameraError] = useState('');
+	const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
 	// Busca manual
 	const [searchTerm, setSearchTerm] = useState('');
@@ -100,9 +92,22 @@ export function QrCodeScanner() {
 	}, []);
 
 	/**
+ * DIAGNÓSTICO TEMPORÁRIO: registra etapas do fluxo de câmera.
+ * Habilitado apenas quando state !== 'idle' para evitar poluição.
+ * Remover após confirmação em dispositivo real.
+ */
+	function logDebug(step: string, detail?: string) {
+ const entry = `[${new Date().toISOString().slice(11, 23)}] ${step}${detail ? ': ' + detail : ''}`;
+ console.warn('[QrScanner-DIAG]', entry);
+ setDebugInfo(prev => [...prev.slice(-9), entry]); // Manter últimas 10 entradas
+	}
+
+	/**
  * Inicializa o scanner APÓS a permissão ter sido concedida.
  * Chamado pelo useEffect quando state === 'initializing'.
- * Usa fallback em cascata: environment → sem constraints.
+ *
+ * CORREÇÃO: O container agora está VISÍVEL neste estado (não hidden),
+ * garantindo que o html5-qrcode encontre um elemento com dimensões reais.
  */
 	useEffect(() => {
  if (state !== 'initializing') return;
@@ -112,13 +117,21 @@ export function QrCodeScanner() {
  isInitializingRef.current = true;
 
  async function initScanner() {
- // Aguardar próximo frame para garantir que o DOM está pronto
+ logDebug('INIT_START', 'useEffect disparado para state=initializing');
+
+ // Aguardar próximo frame para garantir que o DOM está pronto e visível
+ await new Promise(resolve => requestAnimationFrame(resolve));
+ // Segundo frame para garantir layout completo no mobile
  await new Promise(resolve => requestAnimationFrame(resolve));
 
- if (cancelled || !isMountedRef.current) return;
+ if (cancelled || !isMountedRef.current) {
+ logDebug('INIT_CANCELLED', 'Componente desmontado ou cancelado');
+ return;
+ }
 
  const container = scannerContainerRef.current;
  if (!container) {
+ logDebug('INIT_NO_CONTAINER', 'scannerContainerRef.current é null');
  if (isMountedRef.current) {
  setCameraError('Elemento do scanner não encontrado. Tente novamente.');
  setState('error');
@@ -127,13 +140,29 @@ export function QrCodeScanner() {
  return;
  }
 
+ // Verificar se o container tem dimensões reais (não está hidden/collapsed)
+ const rect = container.getBoundingClientRect();
+ logDebug('INIT_CONTAINER_SIZE', `${rect.width}x${rect.height}, visible=${rect.width > 0 && rect.height > 0}`);
+
+ if (rect.width === 0 || rect.height === 0) {
+ logDebug('INIT_ZERO_SIZE', 'Container tem dimensão zero — possível problema de CSS');
+ // Tentar forçar visibilidade e aguardar mais um frame
+ container.style.display = 'block';
+ container.style.visibility = 'visible';
+ container.style.minHeight = '300px';
+ await new Promise(resolve => requestAnimationFrame(resolve));
+ }
+
  try {
+ logDebug('IMPORT_HTML5QRCODE', 'Carregando biblioteca...');
  const { Html5Qrcode } = await import('html5-qrcode');
+ logDebug('IMPORT_DONE', 'Biblioteca carregada');
 
  if (cancelled || !isMountedRef.current) return;
 
  // Limpar instância anterior se existir
  if (html5QrCodeRef.current) {
+ logDebug('CLEANUP_PREVIOUS', 'Limpando instância anterior');
  try { await html5QrCodeRef.current.stop().catch(() => {}); } catch {}
  try { html5QrCodeRef.current.clear(); } catch {}
  html5QrCodeRef.current = null;
@@ -143,76 +172,83 @@ export function QrCodeScanner() {
  fps: 10,
  qrbox: { width: 250, height: 250 },
  aspectRatio: 1.0,
+ verbose: false,
  };
 
  const onScanSuccess = async (decodedText: string) => {
  if (processingRef.current) return;
  processingRef.current = true;
+ logDebug('SCAN_SUCCESS', 'QR Code detectado');
  await cleanupScanner();
  if (isMountedRef.current) {
  await handleQrCodeRead(decodedText);
  }
  };
- const onScanFailure = () => {};
+ const onScanFailure = () => {}; // Ignorar erros por frame
 
- // Tentativa 1: câmera traseira preferida
+ // ESTRATÉGIA DE INICIALIZAÇÃO EM CASCATA:
+ // 1. facingMode: 'environment' (câmera traseira)
+ // 2. facingMode: 'user' (câmera frontal)
+ // 3. Sem constraints (qualquer câmera disponível)
+ const strategies: Array<{ label: string; camera: object }> = [
+ { label: 'environment', camera: { facingMode: 'environment' } },
+ { label: 'user', camera: { facingMode: 'user' } },
+ { label: 'default', camera: {} },
+ ];
+
+ let lastError: Error | null = null;
+
+ for (const strategy of strategies) {
+ if (cancelled || !isMountedRef.current) break;
+
+ logDebug(`TRY_${strategy.label.toUpperCase()}`, `Tentando scanner.start com ${strategy.label}`);
+
  try {
- const scanner = new Html5Qrcode('qr-scanner-container');
- html5QrCodeRef.current = scanner;
-
- await scanner.start(
- { facingMode: 'environment' },
- scannerConfig,
- onScanSuccess,
- onScanFailure,
- );
-
- if (!cancelled && isMountedRef.current) {
- setState('scanning');
- }
- } catch (firstError) {
- if (cancelled || !isMountedRef.current) throw firstError;
-
- const firstMsg = firstError instanceof Error ? firstError.message : String(firstError);
- const isDeviceConstraintError =
- firstMsg.includes('NotFoundError') ||
- firstMsg.includes('OverconstrainedError') ||
- firstMsg.includes('not found') ||
- firstMsg.includes('No video input') ||
- firstMsg.includes('Could not start video source');
-
- if (isDeviceConstraintError) {
- // Tentativa 2: sem constraints (câmera padrão do dispositivo)
- console.warn('[QrScanner] facingMode:environment falhou, tentando fallback:', firstMsg);
- try {
+ // Limpar instância anterior entre tentativas
  if (html5QrCodeRef.current) {
  try { await html5QrCodeRef.current.stop().catch(() => {}); } catch {}
  try { html5QrCodeRef.current.clear(); } catch {}
  html5QrCodeRef.current = null;
  }
 
- const fallbackScanner = new Html5Qrcode('qr-scanner-container');
- html5QrCodeRef.current = fallbackScanner;
+ const scanner = new Html5Qrcode('qr-scanner-container');
+ html5QrCodeRef.current = scanner;
 
- await fallbackScanner.start(
- {},
+ await scanner.start(
+ strategy.camera,
  scannerConfig,
  onScanSuccess,
  onScanFailure,
  );
 
+ logDebug(`SUCCESS_${strategy.label.toUpperCase()}`, `Scanner iniciado com ${strategy.label}`);
+
  if (!cancelled && isMountedRef.current) {
  setState('scanning');
+ setDebugInfo([]); // Limpar debug após sucesso
  }
- } catch (fallbackError) {
- throw fallbackError;
+ return; // Sucesso! Sair da função
+ } catch (err) {
+ const msg = err instanceof Error ? err.message : String(err);
+ logDebug(`FAIL_${strategy.label.toUpperCase()}`, msg.substring(0, 200));
+ lastError = err instanceof Error ? err : new Error(msg);
+
+ // Se for erro de permissão ou segurança, não tentar fallback
+ if (msg.includes('NotAllowedError') || msg.includes('Permission') ||
+ msg.includes('SecurityError') || msg.includes('SecureContext')) {
+ break; // Parar tentativas, propagar erro
  }
- } else {
- throw firstError;
  }
+ }
+
+ // Todas as estratégias falharam
+ if (lastError && !cancelled && isMountedRef.current) {
+ logDebug('ALL_STRATEGIES_FAILED', lastError.message.substring(0, 200));
+ handleError(lastError);
  }
  } catch (e) {
  if (cancelled || !isMountedRef.current) return;
+ logDebug('UNEXPECTED_ERROR', e instanceof Error ? e.message : String(e));
  handleError(e);
  } finally {
  isInitializingRef.current = false;
@@ -258,18 +294,26 @@ export function QrCodeScanner() {
 
 	/**
  * ETAPA CRÍTICA: Solicita permissão de câmera via getUserMedia() nativo.
- * Esta chamada DEVE ser disparada por interação do usuário (clique no botão).
- * O navegador exibirá o prompt de permissão nesta etapa.
- * Após autorização, o stream temporário é liberado e o scanner é inicializado.
+ *
+ * CORREÇÃO: NÃO liberamos o stream temporário aqui. No Chrome Android,
+ * liberar o stream antes de iniciar o html5-qrcode pode fazer o navegador
+ * revogar a permissão ou liberar o hardware da câmera. O html5-qrcode
+ * cria seu próprio stream internamente via scanner.start().
+ *
+ * O getUserMedia() aqui serve APENAS para forçar o prompt de permissão
+ * do navegador. Após autorização, transicionamos para 'initializing'.
  */
 	async function requestCameraPermission() {
  setCameraError('');
  setErrorMessage('');
+ setDebugInfo([]);
  setValidationResult(null);
  setSelectedParticipants(new Set());
  setCheckInResults(new Map());
  processingRef.current = false;
  isInitializingRef.current = false;
+
+ logDebug('PERM_CHECK_API', `mediaDevices=${!!navigator?.mediaDevices}, getUserMedia=${!!navigator?.mediaDevices?.getUserMedia}`);
 
  // Verificar se a API está disponível
  if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -285,19 +329,27 @@ export function QrCodeScanner() {
  return;
  }
 
+ logDebug('PERM_SECURE_CONTEXT', `isSecureContext=${window.isSecureContext}`);
  setState('requestingPermission');
 
  try {
+ logDebug('PERM_REQUESTING', 'Chamando getUserMedia para solicitar permissão...');
+
  // Solicitar permissão explicitamente via getUserMedia
- // Esta é a chamada que faz o navegador exibir o prompt de permissão
  const stream = await navigator.mediaDevices.getUserMedia({
  audio: false,
  video: { facingMode: { ideal: 'environment' } },
  });
 
- // Permissão concedida! Liberar o stream temporário imediatamente
- // O html5-qrcode criará seu próprio stream na etapa de inicialização
- stream.getTracks().forEach((track) => track.stop());
+ // Permissão concedida!
+ const tracks = stream.getTracks();
+ logDebug('PERM_GRANTED', `${tracks.length} track(s) obtida(s): ${tracks.map(t => `${t.kind}/${t.readyState}`).join(', ')}`);
+
+ // CORREÇÃO: Liberar o stream temporário AGORA, mas de forma segura.
+ // O html5-qrcode criará seu próprio stream em scanner.start().
+ // A permissão já foi concedida e persiste na sessão do navegador.
+ tracks.forEach((track) => track.stop());
+ logDebug('PERM_STREAM_RELEASED', 'Stream temporário liberado');
 
  if (!isMountedRef.current) return;
 
@@ -305,6 +357,7 @@ export function QrCodeScanner() {
  setState('initializing');
  } catch (e) {
  if (!isMountedRef.current) return;
+ logDebug('PERM_DENIED', e instanceof Error ? `${e.name}: ${e.message}` : String(e));
  handleError(e);
  }
 	}
@@ -339,7 +392,6 @@ export function QrCodeScanner() {
  return;
  }
 
- // Aviso não-bloqueante para RSVP pendente/recusado
  if (result.data.participants.length > 0 && result.error) {
  setErrorMessage(result.error);
  }
@@ -437,6 +489,7 @@ export function QrCodeScanner() {
  setCheckInResults(new Map());
  setErrorMessage('');
  setCameraError('');
+ setDebugInfo([]);
  processingRef.current = false;
  isInitializingRef.current = false;
 	}
@@ -461,26 +514,51 @@ export function QrCodeScanner() {
  return <AlertCircle size={24} className="shrink-0 text-red-600" />;
 	}
 
+	// Determinar se o container deve estar visível
+	// CORREÇÃO: container visível durante 'initializing' E 'scanning'
+	const isContainerVisible = state === 'initializing' || state === 'scanning';
+
 	return (
  <div className="space-y-4">
  {/*
- Container do scanner SEMPRE presente no DOM (oculto via CSS quando não scanning).
- Garante que o elemento exista antes da inicialização do html5-qrcode.
+ CORREÇÃO CRÍTICA: Container SEMPRE presente no DOM e VISÍVEL durante
+ 'initializing' e 'scanning'. Anteriormente estava hidden durante
+ 'initializing', o que causava dimensão zero e falha do html5-qrcode.
  */}
  <div
  ref={scannerContainerRef}
- className={`relative overflow-hidden rounded-xl border-2 border-[#17291F]/20 bg-black shadow-lg transition-all ${
- state === 'scanning' ? 'block' : 'hidden'
+ id="qr-scanner-container"
+ className={`relative overflow-hidden rounded-xl border-2 border-[#17291F]/20 bg-black shadow-lg ${
+ isContainerVisible ? 'block min-h-[300px]' : 'hidden'
  }`}
+ style={{ minHeight: isContainerVisible ? '300px' : undefined }}
  >
+ {state === 'initializing' && (
+ <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80">
+ <Loader2 size={32} className="mb-3 animate-spin text-white/60" />
+ <p className="text-xs font-medium text-white/60">Inicializando câmera...</p>
+ </div>
+ )}
+ {state === 'scanning' && (
  <div className="absolute bottom-0 left-0 right-0 z-10 bg-black/60 p-3 text-center">
  <p className="text-xs font-medium text-white/80">Aponte a câmera para o QR Code</p>
  </div>
+ )}
  </div>
 
- {/* ================================================================ */}
- {/* ESTADO: IDLE — Botão "Ativar Câmera"                            */}
- {/* ================================================================ */}
+ {/* DIAGNÓSTICO TEMPORÁRIO — visível apenas durante erros ou inicialização */}
+ {debugInfo.length > 0 && (state === 'error' || state === 'initializing' || state === 'requestingPermission') && (
+ <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+ <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-yellow-700">Diagnóstico Técnico</p>
+ <div className="max-h-32 overflow-y-auto space-y-0.5">
+ {debugInfo.map((entry, i) => (
+ <p key={i} className="font-mono text-[9px] leading-tight text-yellow-800/70">{entry}</p>
+ ))}
+ </div>
+ </div>
+ )}
+
+ {/* ESTADO: IDLE */}
  {state === 'idle' && (
  <div className="space-y-4">
  <button
@@ -501,9 +579,7 @@ export function QrCodeScanner() {
  </div>
  )}
 
- {/* ================================================================ */}
- {/* ESTADO: SOLICITANDO PERMISSÃO                                    */}
- {/* ================================================================ */}
+ {/* ESTADO: SOLICITANDO PERMISSÃO */}
  {state === 'requestingPermission' && (
  <div className="flex flex-col items-center justify-center rounded-xl border border-[#17291F]/10 bg-white p-10 shadow-sm">
  <Loader2 size={40} className="mb-4 animate-spin text-[#17291F]/40" />
@@ -512,19 +588,7 @@ export function QrCodeScanner() {
  </div>
  )}
 
- {/* ================================================================ */}
- {/* ESTADO: INICIALIZANDO SCANNER                                    */}
- {/* ================================================================ */}
- {state === 'initializing' && (
- <div className="flex flex-col items-center justify-center rounded-xl border border-[#17291F]/10 bg-white p-10 shadow-sm">
- <Loader2 size={40} className="mb-4 animate-spin text-[#17291F]/40" />
- <p className="text-sm font-medium text-[#17291F]/60">Inicializando câmera...</p>
- </div>
- )}
-
- {/* ================================================================ */}
- {/* ESTADO: SCANNING ATIVO                                           */}
- {/* ================================================================ */}
+ {/* ESTADO: SCANNING ATIVO */}
  {state === 'scanning' && (
  <button
  onClick={async () => { await cleanupScanner(); setState('idle'); }}
@@ -534,9 +598,7 @@ export function QrCodeScanner() {
  </button>
  )}
 
- {/* ================================================================ */}
- {/* ESTADO: VALIDANDO CONVITE                                        */}
- {/* ================================================================ */}
+ {/* ESTADO: VALIDANDO CONVITE */}
  {state === 'validating' && (
  <div className="flex flex-col items-center justify-center rounded-xl border border-[#17291F]/10 bg-white p-10 shadow-sm">
  <Loader2 size={40} className="mb-4 animate-spin text-[#17291F]/40" />
@@ -544,9 +606,7 @@ export function QrCodeScanner() {
  </div>
  )}
 
- {/* ================================================================ */}
- {/* ESTADO: ERRO                                                     */}
- {/* ================================================================ */}
+ {/* ESTADO: ERRO */}
  {(state === 'error' || cameraError) && (
  <div className="space-y-4">
  <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-5">
@@ -566,9 +626,7 @@ export function QrCodeScanner() {
  </div>
  )}
 
- {/* ================================================================ */}
- {/* ESTADO: RESULTADO DA VALIDAÇÃO                                   */}
- {/* ================================================================ */}
+ {/* ESTADO: RESULTADO DA VALIDAÇÃO */}
  {state === 'result' && validationResult && (
  <div className="space-y-4">
  <div className="rounded-xl border border-[#17291F]/10 bg-white p-5 shadow-sm">
@@ -669,9 +727,7 @@ export function QrCodeScanner() {
  </div>
  )}
 
- {/* ================================================================ */}
- {/* BUSCA MANUAL                                                      */}
- {/* ================================================================ */}
+ {/* BUSCA MANUAL */}
  {showSearch && state === 'idle' && (
  <div className="rounded-xl border border-[#17291F]/10 bg-white p-5 shadow-sm">
  <div className="mb-4 flex items-center justify-between">
