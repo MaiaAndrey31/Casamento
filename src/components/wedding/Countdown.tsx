@@ -3,6 +3,12 @@
 
 import { useCountdown } from '@/hooks/useCountdown';
 import { WEDDING_CONFIG } from '@/config/wedding';
+import { formatReadableDate } from '@/lib/format-wedding-date';
+
+interface CountdownProps {
+	eventDate?: string | null;
+	timezone?: string | null;
+}
 
 /**
  * Contagem Regressiva — Nossa Aliança
@@ -10,18 +16,22 @@ import { WEDDING_CONFIG } from '@/config/wedding';
  * Mantém toda a lógica original do countdown.
  */
 
-export function Countdown() {
-  const {
-    days,
-    hours,
-    minutes,
-    seconds,
-    isExpired,
-    isConfigured,
-  } = useCountdown(
-    WEDDING_CONFIG.eventDate,
-    WEDDING_CONFIG.timezone,
-  );
+export function Countdown(props: CountdownProps) {
+	const eventDate = props.eventDate || WEDDING_CONFIG.eventDate;
+	const timezone = props.timezone || WEDDING_CONFIG.timezone;
+
+	const {
+		days,
+		hours,
+		minutes,
+		seconds,
+		isExpired,
+		isConfigured,
+	} = useCountdown(eventDate, timezone);
+
+	const readableDate = isConfigured && eventDate
+		? formatReadableDate(eventDate, timezone)
+		: '';
 
   const sectionClass = `
     relative overflow-hidden
@@ -249,9 +259,11 @@ export function Countdown() {
           Cada segundo nos aproxima do nosso para sempre.
         </p>
 
-        <p className="mt-3 font-sans text-[9px] font-semibold uppercase tracking-[0.25em] text-[#C6A15B]/80">
-          12 de dezembro de 2026
-        </p>
+        {readableDate && (
+          <p className="mt-3 font-sans text-[9px] font-semibold uppercase tracking-[0.25em] text-[#C6A15B]/80">
+            {readableDate}
+          </p>
+        )}
 
       </div>
     </section>

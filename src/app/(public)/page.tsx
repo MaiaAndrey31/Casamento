@@ -28,8 +28,13 @@ export default async function HomePage() {
 					heroMessage={event?.heroMessage}
 					heroVerse={event?.heroVerse}
 					heroVerseReference={event?.heroVerseReference}
+					eventDate={event?.eventDate}
+					timezone={event?.timezone}
 				/>
-				<Countdown />
+				<Countdown
+					eventDate={event?.eventDate}
+					timezone={event?.timezone}
+				/>
 				<StoryAnimations />
 				<EventDetails
 					eventDate={event?.eventDate}

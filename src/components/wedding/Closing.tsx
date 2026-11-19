@@ -18,7 +18,7 @@ export function Closing(props: ClosingProps) {
     const closingSignature =
         props.closingSignature || WEDDING_CONFIG.closingSignature;
 
-    const couplePhoto = getAssetPath('casados-aa.webp');
+    const couplePhoto = getAssetPath('beijo.webp');
 
     return (
         <section
