@@ -113,7 +113,7 @@ export default async function InvitationPage({ params }: PageProps) {
 					{/* Logo original do casal */}
 					<div className="mx-auto mb-8 w-32 md:w-40">
 						<Image
-							src={getAssetPath('Logo de casamento Andrey & Amanda.png')}
+							src={getAssetPath('logo-aa-casamento.webp')}
 							alt="Logo Andrey & Amanda"
 							width={160}
 							height={160}
@@ -209,7 +209,15 @@ export default async function InvitationPage({ params }: PageProps) {
 									</p>
 									<div className="mt-3 flex items-center gap-2 text-body-md text-white/70">
 										<Clock size={16} className="text-[#e4c286]/60" />
-										<span>às {config.ceremonyTime}</span>
+										<span>
+											às{' '}
+											{new Date(config.eventDate).toLocaleTimeString('pt-BR', {
+												hour: '2-digit',
+												minute: '2-digit',
+												timeZone: config.timezone,
+												hour12: false,
+											})}
+										</span>
 									</div>
 								</div>
 							) : (
