@@ -40,15 +40,68 @@ type ConfigFormInput = {
 
 /**
  * Converte string datetime-local ("2026-12-12T19:00") + timezone para ISO 8601 completo.
- * Retorna string vazia se o input estiver vazio.
+ *
+ * O input datetime-local não contém timezone. Interpretamos os componentes
+ * (ano, mês, dia, hora, minuto) como valores literais no fuso horário configurado,
+ * calculando o offset UTC correto para aquela data específica (respeitando DST).
+ *
+ * Retorna string vazia se o input estiver vazio ou inválido.
  */
 function localToISO(localValue: string, tz: string): string {
 	if (!localValue) return '';
 	try {
-		// Construir data no fuso horário especificado
-		const date = new Date(localValue);
-		if (isNaN(date.getTime())) return '';
-		return date.toISOString();
+		const [datePart, timePart] = localValue.split('T');
+		if (!datePart || !timePart) return '';
+
+		const [year, month, day] = datePart.split('-').map(Number);
+		const [hour, minute] = timePart.split(':').map(Number);
+
+		if ([year, month, day, hour, minute].some((v) => isNaN(v))) return '';
+
+		const timezone = tz || 'America/Sao_Paulo';
+
+		// Estratégia: criar um timestamp UTC provisório e medir quanto ele
+		// "desloca" quando formatado no timezone alvo. A diferença é o offset.
+		const utcProvisional = Date.UTC(year, month - 1, day, hour, minute, 0);
+
+		const fmt = new Intl.DateTimeFormat('en-US', {
+			timeZone: timezone,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+			hour12: false,
+		});
+
+		const parts = fmt.formatToParts(new Date(utcProvisional));
+		const get = (type: string) =>
+			parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10);
+
+		const tzY = get('year');
+		const tzM = get('month');
+		const tzD = get('day');
+		const tzH = get('hour');
+		const tzMin = get('minute');
+
+		// Timestamp que o timezone alvo representa para esses mesmos valores literais
+		const tzAsUTC = Date.UTC(tzY, tzM - 1, tzD, tzH, tzMin, 0);
+
+		// Offset em milissegundos: quanto o tz está à frente (+) ou atrás (-) do UTC
+		const offsetMs = utcProvisional - tzAsUTC;
+
+		// Construir ISO 8601 com offset explícito
+		const pad = (n: number) => String(n).padStart(2, '0');
+		const base = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00`;
+
+		const totalOffsetMin = Math.round(offsetMs / 60000);
+		const sign = totalOffsetMin >= 0 ? '+' : '-';
+		const absMin = Math.abs(totalOffsetMin);
+		const offH = pad(Math.floor(absMin / 60));
+		const offM = pad(absMin % 60);
+
+		return `${base}${sign}${offH}:${offM}`;
 	} catch {
 		return '';
 	}

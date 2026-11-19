@@ -23,10 +23,15 @@ import { generateInvitationAction } from '@/app/actions/generate-invitation.acti
 import { recoverInvitationLinkAction } from '@/app/actions/recover-invitation-link.action';
 import { regenerateInvitationAction } from '@/app/actions/regenerate-invitation.action';
 import { deactivateGuestAction } from '@/app/actions/deactivate-guest.action';
+import { formatReadableDate, formatWeddingTime } from '@/lib/format-wedding-date';
 
 interface GuestActionsMenuProps {
 	guest: GuestWithInvitation;
 	onRefresh?: () => void;
+	/** Data do casamento (ISO 8601) — fonte oficial do Firestore */
+	eventDate?: string | null;
+	/** Fuso horário configurado */
+	timezone?: string | null;
 }
 
 /**
@@ -41,7 +46,7 @@ interface GuestActionsMenuProps {
  * Convites sem encryptedToken recebem aviso claro e opção de regeneração.
  * A recuperação falha com mensagem orientativa; regeneração funciona normalmente.
  */
-export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
+export function GuestActionsMenu({ guest, onRefresh, eventDate, timezone }: GuestActionsMenuProps) {
 	const router = useRouter();
 	const [isOpen, setIsOpen] = useState(false);
 	const [loading, setLoading] = useState<string | null>(null);
@@ -208,10 +213,15 @@ export function GuestActionsMenu({ guest, onRefresh }: GuestActionsMenuProps) {
 			normalizedPhone = `55${phone}`;
 		}
 
+		// Formatar data e horário dinamicamente a partir dos dados do evento
+		const tz = timezone || 'America/Sao_Paulo';
+		const dateStr = eventDate ? formatReadableDate(eventDate, tz) : 'data a confirmar';
+		const timeStr = eventDate ? formatWeddingTime(eventDate, tz).toLowerCase() : 'horário a confirmar';
+
 		const message = encodeURIComponent(
 			`Olá, ${guest.fullName}! 💚\n\n` +
 			`Com muita alegria, queremos compartilhar com você um momento muito especial das nossas vidas!\n\n` +
-			`No dia *12 de dezembro de 2026, às 19h*, celebraremos nosso casamento diante de Deus, e sua presença será muito importante para nós.\n\n` +
+			`No dia *${dateStr}, às ${timeStr}*, celebraremos nosso casamento diante de Deus, e sua presença será muito importante para nós.\n\n` +
 			`Preparamos um convite especial para você. 💍\n\n` +
 			`💌 Acesse seu convite:\n${url}\n\n` +
 			`Pedimos que confirme sua presença pelo próprio convite.\n\n` +

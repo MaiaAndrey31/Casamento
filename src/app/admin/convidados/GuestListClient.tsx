@@ -12,7 +12,13 @@ import { GuestActionsMenu } from '@/components/admin/GuestActionsMenu';
  * A desativação deve ser feita via Server Action dedicada (não implementada ainda).
  * Este componente NÃO importa funções server-only diretamente.
  */
-export function GuestListClient({ guests }: { guests: GuestWithInvitation[] }) {
+interface GuestListClientProps {
+	guests: GuestWithInvitation[];
+	eventDate?: string | null;
+	timezone?: string | null;
+}
+
+export function GuestListClient({ guests, eventDate, timezone }: GuestListClientProps) {
 	const [refreshKey, setRefreshKey] = useState(0);
 
 	const handleEdit = (guest: GuestWithInvitation) => {
@@ -66,6 +72,8 @@ export function GuestListClient({ guests }: { guests: GuestWithInvitation[] }) {
 							<GuestActionsMenu
 								guest={guest}
 								onRefresh={() => setRefreshKey(prev => prev + 1)}
+								eventDate={eventDate}
+								timezone={timezone}
 							/>
 						</div>
 					</div>

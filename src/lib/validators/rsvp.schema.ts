@@ -121,7 +121,7 @@ export type GuestCreateData = z.infer<typeof guestCreateSchema>;
 
 export const eventSettingsSchema = z.object({
 	coupleNames: z.string().min(2).max(200),
-	eventDate: z.string().datetime({ message: 'Data inválida. Use formato ISO 8601' }),
+	eventDate: z.string().datetime({ message: 'Data inválida. Use formato ISO 8601' }).or(z.literal('')).default(''),
 	timezone: z.string().default('America/Sao_Paulo'),
 	ceremonyTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use formato HH:mm'),
 	receptionTime: z.string().regex(/^\d{2}:\d{2}$/, 'Use formato HH:mm').optional().or(z.literal('')).default(''),

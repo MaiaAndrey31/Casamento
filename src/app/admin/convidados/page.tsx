@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Plus, Search, Users, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { getAdminSession } from '@/lib/auth/admin-session';
 import { listGuests, type GuestWithInvitation } from '@/lib/repositories/guest.repository';
+import { getActiveEvent } from '@/lib/repositories/event.repository';
 import { GuestListClient } from './GuestListClient';
 
 /**
@@ -19,7 +20,11 @@ export default async function AdminGuestsPage() {
 	}
 
 	const eventId = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
-	const { guests, total } = await listGuests(eventId, { limit: 100 });
+	const [guestsResult, event] = await Promise.all([
+		listGuests(eventId, { limit: 100 }),
+		getActiveEvent(),
+	]);
+	const { guests, total } = guestsResult;
 
 	// Contadores por status RSVP
 	const confirmed = guests.filter(g => g.rsvpStatus === 'confirmed').length;
@@ -91,7 +96,11 @@ export default async function AdminGuestsPage() {
 					</Link>
 				</div>
 			) : (
-				<GuestListClient guests={guests} />
+				<GuestListClient
+					guests={guests}
+					eventDate={event?.eventDate}
+					timezone={event?.timezone}
+				/>
 			)}
 		</div>
 	);
