@@ -356,12 +356,25 @@ export async function performParticipantCheckIn(
  const rsvpDoc = await transaction.get(rsvpRef);
  const rsvpData = rsvpDoc.exists ? rsvpDoc.data() : null;
 
- // 4. Verificar se o participante pertence a este convite
+ // 4. Verificar se o participante pertence a este convite e está ativo
  const invDataInner = invDoc.data();
  const guestIds: string[] = Array.isArray(invDataInner?.guestIds) ? (invDataInner.guestIds as string[]) : [];
  const companionIds: string[] = (rsvpData && Array.isArray(rsvpData.companions))
  ? (rsvpData.companions as Array<{ participantId?: string }>).map(c => c.participantId).filter((id): id is string => Boolean(id))
  : [];
+
+ // Bloquear check-in de convidados inativos (desativados pelo admin)
+ if (guestIds.includes(participantId)) {
+ const guestRef = adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection(GUESTS_SUBCOLLECTION)
+ .doc(participantId);
+ const guestDoc = await transaction.get(guestRef);
+ if (guestDoc.exists && guestDoc.data()?.active === false) {
+ throw new Error('GUEST_INACTIVE');
+ }
+ }
 
  const allValidIds = [...guestIds, ...companionIds];
  if (!allValidIds.includes(participantId)) {
@@ -442,6 +455,15 @@ export async function performParticipantCheckIn(
  participantName: resultName,
  alreadyCheckedIn: true,
  error: 'Entrada já registrada (registro legado). Regularize via painel administrativo se necessário.',
+ };
+ }
+
+ if (message === 'GUEST_INACTIVE') {
+ return {
+ success: false,
+ participantName: resultName,
+ alreadyCheckedIn: false,
+ error: 'Este convidado foi desativado e não pode realizar check-in.',
  };
  }
 

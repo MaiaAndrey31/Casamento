@@ -42,7 +42,15 @@ export async function getDashboardStats(eventId: string): Promise<DashboardStats
 			eventRef.collection('checkins').count().get(),
 		]);
 
-		// Calcular RSVPs por status
+		// Coletar IDs de convites ativos para filtrar RSVPs invalidados
+		const activeInvitationIds = new Set<string>();
+		const activeInvitationsSnap = await eventRef
+			.collection('invitations')
+			.where('invitationStatus', '==', 'active')
+			.get();
+		activeInvitationsSnap.docs.forEach((doc) => activeInvitationIds.add(doc.id));
+
+		// Calcular RSVPs por status — apenas contar RSVPs de convites ativos
 		let confirmedRSVPs = 0;
 		let declinedRSVPs = 0;
 		let pendingRSVPs = 0;
@@ -50,11 +58,15 @@ export async function getDashboardStats(eventId: string): Promise<DashboardStats
 		let totalCompanions = 0;
 
 		rsvpsSnap.docs.forEach((doc) => {
+			// Ignorar RSVPs de convites revogados/expirados ou RSVPs invalidados
+			if (!activeInvitationIds.has(doc.id)) return;
+
 			const data = doc.data();
 			if (data.attendanceStatus === 'confirmed') {
 				confirmedRSVPs++;
-				// Contar titular + acompanhantes confirmados
-				totalConfirmedPeople += 1 + (data.companions?.length || 0);
+				// Contar apenas guests confirmados ativos + acompanhantes
+				const confirmedGuestIds: string[] = Array.isArray(data.confirmedGuestIds) ? data.confirmedGuestIds : [];
+				totalConfirmedPeople += confirmedGuestIds.length + (data.companions?.length || 0);
 				totalCompanions += data.companions?.length || 0;
 			} else if (data.attendanceStatus === 'declined') {
 				declinedRSVPs++;

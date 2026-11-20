@@ -219,7 +219,7 @@ async function buildConfirmedItems(
 
 	const items: ConfirmedInvitationItem[] = [];
 
-	// Batch get de invitations
+	// Batch get de invitations — filtrar convites revogados/expirados
 	const invitationDataMap = new Map<string, Record<string, unknown>>();
 	for (const invId of invitationIds) {
 		try {
@@ -231,7 +231,11 @@ async function buildConfirmedItems(
 				.get();
 
 			if (invDoc.exists) {
-				invitationDataMap.set(invId, serializeFirestoreValue(invDoc.data(), `inv.${invId}`) as Record<string, unknown>);
+				const invData = serializeFirestoreValue(invDoc.data(), `inv.${invId}`) as Record<string, unknown>;
+				// Apenas incluir convites ativos na lista de confirmados
+				if (invData.invitationStatus === 'active') {
+					invitationDataMap.set(invId, invData);
+				}
 			}
 		} catch {
 			// Ignorar falhas individuais
@@ -356,8 +360,9 @@ export async function getReceptionSummary(eventId: string): Promise<ReceptionSum
 			const rsvpData = rsvpDoc.data();
 			const companions = Array.isArray(rsvpData?.companions) ? rsvpData.companions.length : 0;
 
-			// Buscar quantidade de guests vinculados ao convite
-			let guestCount = 1; // fallback
+			// Verificar se o convite associado está ativo antes de contar
+			let guestCount = 0;
+			let isActive = false;
 			try {
 				const invDoc = await adminDb
 					.collection('events')
@@ -367,11 +372,15 @@ export async function getReceptionSummary(eventId: string): Promise<ReceptionSum
 					.get();
 				if (invDoc.exists) {
 					const invData = invDoc.data();
+					isActive = invData?.invitationStatus === 'active';
 					guestCount = Array.isArray(invData?.guestIds) ? (invData.guestIds as string[]).length : 1;
 				}
 			} catch {
 				// Usar fallback
 			}
+
+			// Ignorar RSVPs de convites revogados/expirados
+			if (!isActive) continue;
 
 			totalConfirmedPeople += guestCount + companions;
 			confirmedInvitationIds.push(rsvpDoc.id);
