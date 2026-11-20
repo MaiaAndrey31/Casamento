@@ -111,13 +111,13 @@ export default async function InvitationPage({ params }: PageProps) {
 				{/* Conteúdo do Hero — posicionado com padding-top para não ficar atrás do nav */}
 				<div className="relative z-10 mx-auto max-w-2xl pt-28 pb-20 md:pt-32 md:pb-24">
 					{/* Logo original do casal */}
-					<div className="mx-auto mb-8 w-32 md:w-40">
+					<div className="mx-auto mb-10 w-[240px] sm:w-[280px] md:mb-12 md:w-[340px]">
 						<Image
 							src={getAssetPath('logo-aa-casamento.webp')}
 							alt="Logo Andrey & Amanda"
-							width={160}
-							height={160}
-							className="mx-auto drop-shadow-lg"
+							width={340}
+							height={113}
+							className="mx-auto h-auto w-full object-contain drop-shadow-lg"
 							priority
 						/>
 					</div>

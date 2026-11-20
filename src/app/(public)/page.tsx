@@ -1,4 +1,4 @@
-import { Hero } from '@/components/wedding/Hero';
+import { HeroWithContext } from '@/components/wedding/HeroWithContext';
 import { Countdown } from '@/components/wedding/Countdown';
 import { StoryAnimations } from '@/components/wedding/StoryAnimations';
 import { EventDetails } from '@/components/wedding/EventDetails';
@@ -24,7 +24,7 @@ export default async function HomePage() {
 		<>
 			<SectionAnimations />
 			<main className="pb-16 md:pb-0">
-				<Hero
+				<HeroWithContext
 					heroMessage={event?.heroMessage}
 					heroVerse={event?.heroVerse}
 					heroVerseReference={event?.heroVerseReference}

@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { Heart, CalendarClock, CheckCircle, Flower2 } from 'lucide-react';
+import { useInvitationContext } from '@/hooks/useInvitationContext';
 
 /**
  * Navegação Mobile — Barra inferior fixa com links para as seções do convite.
  * Preserva o estilo visual do Stitch sem referência à lista de presentes.
+ * O item RSVP redireciona ao convite individual quando há contexto ativo.
  */
 export function WeddingNavigation() {
+	const { invitationUrl } = useInvitationContext();
 	const [activeSection, setActiveSection] = useState('inicio');
 
 	useEffect(() => {
@@ -32,10 +35,15 @@ export function WeddingNavigation() {
 		return () => window.removeEventListener('scroll', handleScroll);
 	}, []);
 
+	// RSVP redireciona ao convite individual se houver contexto ativo
+	const rsvpHref = invitationUrl
+		? `${invitationUrl}#confirmar-presenca`
+		: '/confirmar-presenca';
+
 	const navItems = [
 		{ id: 'inicio', label: 'Início', icon: Heart, href: '#' },
 		{ id: 'detalhes', label: 'Evento', icon: CalendarClock, href: '#detalhes' },
-		{ id: 'confirmar-presenca', label: 'RSVP', icon: CheckCircle, href: '/confirmar-presenca' },
+		{ id: 'confirmar-presenca', label: 'RSVP', icon: CheckCircle, href: rsvpHref },
 		{ id: 'recados', label: 'Recados', icon: Flower2, href: '#recados' },
 	];
 

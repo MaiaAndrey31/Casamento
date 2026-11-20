@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Heart, Menu, X, ArrowUpRight } from 'lucide-react';
 import { WEDDING_CONFIG } from '@/config/wedding';
+import { useInvitationContext } from '@/hooks/useInvitationContext';
 
 const NAV_ITEMS: {
 	label: string;
@@ -20,6 +21,7 @@ const NAV_ITEMS: {
 
 export function DesktopNav() {
 	const pathname = usePathname();
+	const { invitationUrl } = useInvitationContext();
 
 	const [scrolled, setScrolled] = useState(false);
 	const [activeSection, setActiveSection] = useState('inicio');
@@ -28,9 +30,13 @@ export function DesktopNav() {
 	const isInvitationPage = pathname.startsWith('/convite/');
 	const isHistoryPage = pathname.startsWith('/nossa-historia');
 
-	const ctaHref = isInvitationPage
-		? '#confirmar-presenca'
-		: '/confirmar-presenca';
+	// Se há contexto de convite ativo, redirecionar ao RSVP dentro do convite.
+	// Caso contrário, manter o fluxo público existente.
+	const ctaHref = invitationUrl
+		? `${invitationUrl}#confirmar-presenca`
+		: isInvitationPage
+			? '#confirmar-presenca'
+			: '/confirmar-presenca';
 
 	// Detectar rolagem
 	useEffect(() => {

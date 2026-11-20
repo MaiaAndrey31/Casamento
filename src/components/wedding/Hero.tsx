@@ -16,6 +16,8 @@ interface HeroProps {
 	heroVerseReference?: string | null;
 	eventDate?: string | null;
 	timezone?: string | null;
+	/** URL do convite individual ativo (preservada via sessionStorage) */
+	invitationUrl?: string | null;
 }
 
 export function Hero(props: HeroProps) {
@@ -307,7 +309,7 @@ export function Hero(props: HeroProps) {
 
 				<a
 					data-hero-cta
-					href="/confirmar-presenca"
+					href={props.invitationUrl ? `${props.invitationUrl}#confirmar-presenca` : '/confirmar-presenca'}
 					className="
 						mt-6 inline-flex
 						items-center justify-center
