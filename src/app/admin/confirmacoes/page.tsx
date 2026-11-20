@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { CheckCircle, XCircle, Clock, Users, UtensilsCrossed, Music, MessageSquareHeart } from 'lucide-react';
 import { getAdminSession } from '@/lib/auth/admin-session';
 import type { RSVP, CompanionInfo } from '@/types';
+import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
+import { formatDateTime } from '@/lib/utils/format-date';
 
 /**
  * Gestão de Confirmações — /admin/confirmacoes
@@ -28,7 +30,10 @@ export default async function AdminConfirmacoesPage() {
 			.orderBy('submittedAt', 'desc')
 			.get();
 
-		rsvps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as typeof rsvps;
+		rsvps = snapshot.docs.map(doc => ({
+			id: doc.id,
+			...(serializeFirestoreValue(doc.data(), `rsvp.${doc.id}`) as Record<string, unknown>),
+		})) as typeof rsvps;
 
 		// Enriquecer com nome do convite
 		const invitationIds = [...new Set(rsvps.map(r => r.invitationId).filter(Boolean))];
@@ -182,11 +187,9 @@ function RSVPCard({ rsvp }: { rsvp: RSVP & { invitationDisplayName?: string } })
 				</div>
 
 				{/* Data */}
-				{rsvp.submittedAt && (
-					<span className="shrink-0 text-body-sm text-on-surface-variant">
-						{new Date(rsvp.submittedAt).toLocaleDateString('pt-BR')}
-					</span>
-				)}
+				<span className="shrink-0 text-body-sm text-on-surface-variant">
+					{formatDateTime(rsvp.submittedAt)}
+				</span>
 			</div>
 		</div>
 	);

@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { MessageSquareHeart, CheckCircle, XCircle, Clock, Trash2, Search } from 'lucide-react';
 import { getAdminSession } from '@/lib/auth/admin-session';
 import type { Message } from '@/types';
+import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
+import { formatDateTime } from '@/lib/utils/format-date';
 
 /**
  * Moderação de Recados — /admin/recados
@@ -28,7 +30,11 @@ export default async function AdminRecadosPage() {
 			.limit(100)
 			.get();
 
-		messages = snapshot.docs.map(doc => ({ id: doc.id, eventId, ...doc.data() })) as Message[];
+		messages = snapshot.docs.map(doc => ({
+			id: doc.id,
+			eventId,
+			...(serializeFirestoreValue(doc.data(), `message.${doc.id}`) as Record<string, unknown>),
+		})) as Message[];
 	} catch (e) {
 		console.error('[Recados] Falha ao carregar mensagens:', e);
 	}
@@ -136,11 +142,9 @@ function MessageCard({ message, showActions }: { message: Message; showActions?:
 					<p className="mt-space-sm text-body-md text-on-surface italic">
 						&ldquo;{message.message}&rdquo;
 					</p>
-					{message.createdAt && (
-						<p className="mt-space-xs text-body-sm text-on-surface-variant">
-							{new Date(message.createdAt).toLocaleString('pt-BR')}
-						</p>
-					)}
+					<p className="mt-space-xs text-body-sm text-on-surface-variant">
+						{formatDateTime(message.createdAt)}
+					</p>
 				</div>
 
 				{/* Ações de moderação (apenas para pendentes) */}
