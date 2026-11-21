@@ -687,6 +687,88 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 }
 
 /**
+ * Busca atribuições de mesa para uma lista de participantIds (leitura apenas).
+ * Retorna um mapa { participantId → { tableId, tableName } }.
+ * Usado pelo fluxo de check-in do validador para exibir a mesa de cada participante.
+ * Não realiza escritas no Firestore.
+ */
+export async function getTableAssignmentsByParticipantIds(
+	eventId: string,
+	participantIds: string[],
+): Promise<Map<string, { tableId: string; tableName: string }>> {
+	const result = new Map<string, { tableId: string; tableName: string }>();
+
+	if (participantIds.length === 0) return result;
+
+	try {
+ const { adminDb } = await import('@/lib/firebase/admin');
+
+ // Buscar todas as atribuições dos participantes informados
+ // Firestore não suporta 'in' com mais de 30 valores; dividir em lotes se necessário
+ const batchSize = 30;
+ const assignmentDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+
+ for (let i = 0; i < participantIds.length; i += batchSize) {
+ const batch = participantIds.slice(i, i + batchSize);
+ const snap = await adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection(ASSIGNMENTS_SUBCOLLECTION)
+ .where('participantId', 'in', batch)
+ .get();
+ assignmentDocs.push(...snap.docs);
+ }
+
+ if (assignmentDocs.length === 0) return result;
+
+ // Coletar tableIds únicos para batch lookup de nomes
+ const tableIds = new Set<string>();
+ const pidToTableId = new Map<string, string>();
+
+ for (const doc of assignmentDocs) {
+ const data = doc.data();
+ const pid = data?.participantId as string;
+ const tid = data?.tableId as string;
+ if (pid && tid) {
+ pidToTableId.set(pid, tid);
+ tableIds.add(tid);
+ }
+ }
+
+ // Batch lookup de nomes das mesas
+ const tableNameMap = new Map<string, string>();
+ const tableIdArray = Array.from(tableIds);
+
+ for (let i = 0; i < tableIdArray.length; i += batchSize) {
+ const batch = tableIdArray.slice(i, i + batchSize);
+ const tablesSnap = await adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection(TABLES_SUBCOLLECTION)
+ .where('__name__', 'in', batch)
+ .get();
+
+ for (const tDoc of tablesSnap.docs) {
+ tableNameMap.set(tDoc.id, tDoc.data()?.name || 'Mesa');
+ }
+ }
+
+ // Montar resultado
+ for (const [pid, tid] of pidToTableId) {
+ result.set(pid, {
+ tableId: tid,
+ tableName: tableNameMap.get(tid) || 'Mesa',
+ });
+ }
+
+ return result;
+	} catch (e) {
+ console.error('[TablesRepository] Falha ao buscar atribuições por participantIds:', e);
+ return result;
+	}
+}
+
+/**
  * Normaliza string para busca: minúsculas, sem acentos, trim.
  */
 function normalizeSearch(value: string): string {

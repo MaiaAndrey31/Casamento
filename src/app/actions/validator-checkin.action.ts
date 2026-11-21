@@ -200,6 +200,7 @@ export async function searchGuestsAction(
 	invitationId: string;
 	invitationDisplayName: string;
 	checkedIn: boolean;
+	tableName?: string;
 }>>> {
 	try {
 		await requireValidatorSession();
@@ -215,5 +216,22 @@ export async function searchGuestsAction(
 	}
 
 	const results = await searchConfirmedGuests(eventId, searchTerm);
-	return { success: true, data: results };
+
+	// Enrich with table assignment info (read-only)
+	try {
+		const participantIds = results.map(r => r.guestId);
+		const { getTableAssignmentsByParticipantIds } = await import('@/lib/repositories/tables.repository');
+		const tableMap = await getTableAssignmentsByParticipantIds(eventId, participantIds);
+
+		const enrichedResults = results.map(r => ({
+			...r,
+			tableName: tableMap.get(r.guestId)?.tableName,
+		}));
+
+		return { success: true, data: enrichedResults };
+	} catch (e) {
+		// Table lookup failure must not break manual search
+		console.warn('[SearchGuests] Falha ao consultar mesas (busca continua):', e);
+		return { success: true, data: results };
+	}
 }

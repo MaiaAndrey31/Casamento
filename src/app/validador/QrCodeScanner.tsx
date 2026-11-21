@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { Camera, X, RefreshCw, CheckCircle, AlertCircle, Loader2, UserCheck, QrCode, Search, VideoOff, Lock, ShieldAlert } from 'lucide-react';
@@ -20,6 +20,7 @@ interface SearchResult {
 	invitationId: string;
 	invitationDisplayName: string;
 	checkedIn: boolean;
+	tableName?: string;
 }
 
 /**
@@ -718,6 +719,13 @@ export function QrCodeScanner() {
 													</span>
 												)}
 											</div>
+											{participant.tableName ? (
+												<p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-[#17291F]/80">
+													🪑 {participant.tableName}
+												</p>
+											) : (
+												<p className="mt-0.5 text-xs font-medium text-orange-600">⚠ Sem mesa atribuída</p>
+											)}
 											{justCheckedIn && <p className="text-xs font-medium text-green-600">✅ Entrada registrada agora</p>}
 											{alreadyWasCheckedIn && <p className="text-xs text-green-600/70">Entrada já registrada</p>}
 										</div>
@@ -786,6 +794,13 @@ export function QrCodeScanner() {
 									<div className="min-w-0 flex-1">
 										<p className="truncate text-sm font-medium text-[#17291F]">{guest.fullName}</p>
 										<p className="truncate text-xs text-[#17291F]/50">{guest.invitationDisplayName}</p>
+										{guest.tableName ? (
+											<p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-[#17291F]/80">
+												🪑 {guest.tableName}
+											</p>
+										) : (
+											<p className="mt-0.5 text-xs font-medium text-orange-600">⚠ Sem mesa atribuída</p>
+										)}
 									</div>
 									{guest.checkedIn ? (
 										<span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-green-800">

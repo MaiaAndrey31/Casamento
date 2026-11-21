@@ -227,11 +227,27 @@ export async function validateInvitationForCheckIn(
  const checkedInIds = await getCheckedInParticipantIds(eventId, invitationId);
 
  // Marcar participantes que já entraram
- const participantsWithStatus = participants.map(p => ({
+ const participantsWithCheckIn = participants.map(p => ({
  ...p,
  checkedIn: checkedInIds.has(p.participantId),
  checkedInAt: checkedInIds.has(p.participantId) ? undefined : undefined, // TODO: buscar timestamp se necessário
  }));
+
+ // Enriquecer com informação de mesa (leitura apenas, sem escrita)
+ let participantsWithStatus = participantsWithCheckIn;
+ try {
+ const participantIds = participantsWithCheckIn.map(p => p.participantId);
+ const { getTableAssignmentsByParticipantIds } = await import('@/lib/repositories/tables.repository');
+ const tableMap = await getTableAssignmentsByParticipantIds(eventId, participantIds);
+
+ participantsWithStatus = participantsWithCheckIn.map(p => ({
+ ...p,
+ tableName: tableMap.get(p.participantId)?.tableName,
+ }));
+ } catch (e) {
+ // Falha na consulta de mesas NÃO deve comprometer o check-in
+ console.warn('[ValidatorCheckIn] Falha ao consultar mesas (check-in continua):', e);
+ }
 
  const totalCheckedIn = participantsWithStatus.filter(p => p.checkedIn).length;
  const totalPending = participantsWithStatus.length - totalCheckedIn;

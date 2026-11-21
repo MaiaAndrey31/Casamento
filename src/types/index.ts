@@ -222,6 +222,7 @@ export interface CheckInParticipant {
   checkedIn: boolean;
   checkedInAt?: string;
   checkedInBy?: string;
+  tableName?: string; // Nome da mesa atribuída (consulta read-only do módulo de mesas)
 }
 
 /**
