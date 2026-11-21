@@ -970,7 +970,10 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
 			className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
 			onClick={onClose}
 		>
-			<div onClick={e => e.stopPropagation()} className="w-full sm:max-w-[inherit]">
+			<div
+				onClick={e => e.stopPropagation()}
+				className="mx-auto w-full max-w-2xl sm:mx-auto"
+			>
 				{children}
 			</div>
 		</div>
