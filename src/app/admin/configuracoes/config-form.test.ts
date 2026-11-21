@@ -50,6 +50,11 @@ function getUtcOffsetForLocal(
 	return Math.round(offsetMs / 60000);
 }
 
+/**
+ * Réplica da função localToISO corrigida.
+ * Zod 3.x .datetime() NÃO aceita offsets (-03:00), apenas formato UTC com Z.
+ * Converte horário local para UTC antes de formatar.
+ */
 function localToISO(localValue: string, tz: string): string {
 	if (!localValue) return '';
 	try {
@@ -62,20 +67,17 @@ function localToISO(localValue: string, tz: string): string {
 		if ([year, month, day, hour, minute].some((v) => isNaN(v))) return '';
 
 		const timezone = tz || 'America/Sao_Paulo';
-		// getUtcOffsetForLocal retorna minutos tal que UTC = local + offset.
-		// ISO 8601 offset é o sinal oposto: local = UTC + isoOffset.
-		const rawOffsetMin = getUtcOffsetForLocal(year, month, day, hour, minute, timezone);
-		const isoOffsetMin = -rawOffsetMin;
 
-		const pad = (n: number) => String(n).padStart(2, '0');
-		const base = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00`;
+		// Calcular o offset do timezone para este momento específico
+		// getUtcOffsetForLocal retorna minutos tal que UTC = local + offset
+		const offsetMin = getUtcOffsetForLocal(year, month, day, hour, minute, timezone);
 
-		const sign = isoOffsetMin >= 0 ? '+' : '-';
-		const absMin = Math.abs(isoOffsetMin);
-		const offH = pad(Math.floor(absMin / 60));
-		const offM = pad(absMin % 60);
+		// Converter horário local para UTC ADICIONANDO o offset
+		// Ex: BRT offset=+180 → UTC = 17:30 + 180min = 20:30
+		const localAsMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+		const utcMs = localAsMs + offsetMin * 60000;
 
-		return `${base}${sign}${offH}:${offM}`;
+		return new Date(utcMs).toISOString();
 	} catch {
 		return '';
 	}
@@ -117,9 +119,11 @@ function isoToLocal(isoValue: string | null | undefined, tz?: string): string {
 
 describe('Conversão de datas — config-form', () => {
 	describe('localToISO', () => {
-		it('deve produzir ISO 8601 com offset -03:00 para dezembro em America/Sao_Paulo', () => {
+		it('deve produzir ISO 8601 em UTC (Z) para dezembro em America/Sao_Paulo', () => {
+			// Zod 3.x .datetime() só aceita formato UTC com Z, não offsets
+			// 17:30 BRT (-03:00) = 20:30 UTC
 			const result = localToISO('2026-12-12T17:30', 'America/Sao_Paulo');
-			expect(result).toBe('2026-12-12T17:30:00-03:00');
+			expect(result).toBe('2026-12-12T20:30:00.000Z');
 		});
 
 		it('deve retornar string vazia para input vazio', () => {
@@ -134,15 +138,17 @@ describe('Conversão de datas — config-form', () => {
 			expect(localToISO('T17:30', 'America/Sao_Paulo')).toBe('');
 		});
 
-		it('deve produzir ISO válido aceito por Zod .datetime()', () => {
+		it('deve produzir ISO válido aceito por Zod .datetime() (formato UTC com Z)', () => {
 			const iso = localToISO('2026-12-12T17:30', 'America/Sao_Paulo');
-			const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+			// Zod 3.x .datetime() aceita apenas formato UTC com Z
+			const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 			expect(isoRegex.test(iso)).toBe(true);
 		});
 
-		it('deve calcular offset correto para rsvpDeadline 02/12/2026 23:59', () => {
+		it('deve converter rsvpDeadline 02/12/2026 23:59 BRT para UTC', () => {
+			// 23:59 BRT (-03:00) = 02:59 UTC do dia seguinte
 			const result = localToISO('2026-12-02T23:59', 'America/Sao_Paulo');
-			expect(result).toBe('2026-12-02T23:59:00-03:00');
+			expect(result).toBe('2026-12-03T02:59:00.000Z');
 		});
 	});
 
@@ -178,7 +184,8 @@ describe('Conversão de datas — config-form', () => {
 			expect(localValue).toBe('2026-12-12T17:30');
 
 			const resultISO = localToISO(localValue, tz);
-			expect(resultISO).toBe('2026-12-12T17:30:00-03:00');
+			// localToISO agora produz formato UTC (Z) compatível com Zod .datetime()
+			expect(resultISO).toBe('2026-12-12T20:30:00.000Z');
 
 			// Mesmo instante UTC
 			expect(new Date(resultISO).getTime()).toBe(new Date(originalISO).getTime());
@@ -192,6 +199,8 @@ describe('Conversão de datas — config-form', () => {
 			expect(localValue).toBe('2026-12-02T23:59');
 
 			const resultISO = localToISO(localValue, tz);
+			// localToISO produz formato UTC (Z) compatível com Zod .datetime()
+			expect(resultISO).toBe('2026-12-03T02:59:00.000Z');
 
 			// Mesmo instante UTC
 			expect(new Date(resultISO).getTime()).toBe(new Date(originalISO).getTime());
@@ -205,6 +214,8 @@ describe('Conversão de datas — config-form', () => {
 			expect(localValue).toBe('2026-12-12T17:30');
 
 			const resultISO = localToISO(localValue, tz);
+			// Round-trip perfeito: UTC → local → UTC
+			expect(resultISO).toBe('2026-12-12T20:30:00.000Z');
 
 			// Mesmo instante UTC
 			expect(new Date(resultISO).getTime()).toBe(new Date(originalISO).getTime());

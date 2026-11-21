@@ -92,6 +92,18 @@ function getUtcOffsetForLocal(
  *
  * Retorna string vazia se o input estiver vazio ou inválido.
  */
+/**
+ * Converte string datetime-local ("2026-12-12T17:30") + timezone para ISO 8601 em UTC.
+ *
+ * IMPORTANTE: Zod 3.x .datetime() NÃO aceita offsets de timezone (-03:00, +00:00).
+ * Apenas aceita formato UTC com sufixo "Z" (ex: "2026-12-12T20:30:00.000Z").
+ * Por isso, esta função converte o horário local para UTC antes de formatar.
+ *
+ * O horário local é interpretado no fuso configurado (ex: America/Sao_Paulo),
+ * e o resultado é sempre uma string UTC válida para validação Zod.
+ *
+ * Retorna string vazia se o input estiver vazio ou inválido.
+ */
 function localToISO(localValue: string, tz: string): string {
 	if (!localValue) return '';
 	try {
@@ -104,21 +116,18 @@ function localToISO(localValue: string, tz: string): string {
 		if ([year, month, day, hour, minute].some((v) => isNaN(v))) return '';
 
 		const timezone = tz || 'America/Sao_Paulo';
-		// getUtcOffsetForLocal returns minutes such that UTC = local + offset.
-		// ISO 8601 offset is the opposite sign: local = UTC + isoOffset.
-		// So isoOffset = -offset. E.g., BRT offset=+180 → ISO offset=-03:00.
-		const rawOffsetMin = getUtcOffsetForLocal(year, month, day, hour, minute, timezone);
-		const isoOffsetMin = -rawOffsetMin;
 
-		const pad = (n: number) => String(n).padStart(2, '0');
-		const base = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00`;
+		// Calcular o offset do timezone para este momento específico
+		// getUtcOffsetForLocal retorna minutos tal que UTC = local + offset
+		// Ex: BRT offset=+180 → UTC = 17:30 + 180min = 20:30
+		const offsetMin = getUtcOffsetForLocal(year, month, day, hour, minute, timezone);
 
-		const sign = isoOffsetMin >= 0 ? '+' : '-';
-		const absMin = Math.abs(isoOffsetMin);
-		const offH = pad(Math.floor(absMin / 60));
-		const offM = pad(absMin % 60);
+		// Converter horário local para UTC ADICIONANDO o offset
+		// Se offset = +180 (BRT), UTC = local - 180min = local - 3h
+		const localAsMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+		const utcMs = localAsMs + offsetMin * 60000;
 
-		return `${base}${sign}${offH}:${offM}`;
+		return new Date(utcMs).toISOString();
 	} catch {
 		return '';
 	}

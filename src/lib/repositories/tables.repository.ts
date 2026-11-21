@@ -756,23 +756,12 @@ export async function listAvailableParticipants(
 				})),
 			);
 
-			// Se algum companion recebeu novo ID, persistir de volta no RSVP
-			const hasNewIds = companionsWithIds.some((c, i) => !rawCompanions[i]?.participantId);
-			if (hasNewIds) {
-				try {
-					await adminDb
-						.collection('events')
-						.doc(eventId)
-						.collection('rsvps')
-						.doc(invitationId)
-						.update({
-							companions: companionsWithIds,
-							updatedAt: FieldValue.serverTimestamp(),
-						});
-				} catch (e) {
-					console.warn('[TablesRepository] Falha ao persistir participantIds de companions:', e);
-				}
-			}
+			// IMPORTANTE: listAvailableParticipants é uma operação de LEITURA.
+			// Companions sem participantId recebem UUIDs em memória apenas para
+			// permitir a atribuição. A persistência dos IDs deve ser feita por
+			// um procedimento explícito e separado (não automático na listagem).
+			// Os UUIDs gerados aqui são estáveis dentro da mesma chamada, mas
+			// NÃO são persistidos automaticamente no Firestore.
 
 			for (const companion of companionsWithIds) {
 				if (assignedParticipantIds.has(companion.participantId)) continue;
