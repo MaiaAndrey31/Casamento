@@ -99,6 +99,20 @@ service cloud.firestore {
         allow update: if false; // Logs são imutáveis
         allow delete: if false;
       }
+
+      match /tables/{tableId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+      }
+
+      match /tableAssignments/{assignmentId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+      }
     }
 
     // ========================================================================

@@ -236,6 +236,46 @@ export interface CompanionWithId {
 }
 
 // ============================================================================
+// ORGANIZAÇÃO DE MESAS
+// ============================================================================
+
+export interface Table {
+  id: string;
+  eventId: string;
+  name: string; // Identificação única da mesa (ex: "Mesa 01", "Família")
+  capacity: number; // Quantidade de lugares
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string; // UID do admin que criou
+}
+
+export interface TableAssignment {
+  id: string;
+  eventId: string;
+  tableId: string;
+  invitationId: string;
+  participantId: string; // guestId (titular) ou UUID (acompanhante)
+  participantName: string; // Denormalizado para performance em listas
+  participantType: 'titular' | 'companion';
+  assignedAt: string;
+  assignedBy: string; // UID do admin que atribuiu
+}
+
+export interface TableWithOccupancy extends Table {
+  occupiedSeats: number;
+  availableSeats: number;
+  assignments: TableAssignment[];
+}
+
+export interface TablesDashboardStats {
+  totalTables: number;
+  totalSeats: number;
+  occupiedSeats: number;
+  availableSeats: number;
+  guestsWithoutTable: number;
+}
+
+// ============================================================================
 // TIPOS DE RESPOSTA DA API
 // ============================================================================
 

@@ -15,6 +15,7 @@ import {
 	History,
 	FileText,
 	Menu,
+	Armchair,
 } from 'lucide-react';
 import { AdminMobileDrawer, type AdminNavItem } from '@/components/admin/AdminMobileDrawer';
 
@@ -30,6 +31,7 @@ const NAV_ITEMS: AdminNavItem[] = [
 	{ href: '/admin/recados', label: 'Recados', icon: MessageSquareHeart },
 	{ href: '/admin/galeria', label: 'Galeria', icon: ImageIcon },
 	{ href: '/admin/configuracoes', label: 'Configurações', icon: Settings },
+	{ href: '/admin/mesas', label: 'Mesas', icon: Armchair },
 	{
 		href: '/admin/check-in',
 		label: 'Check-in',

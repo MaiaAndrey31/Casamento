@@ -139,3 +139,67 @@ E criar o índice no Firebase Console ou publicar via CLI.
 - Não adicione índices especulativos — cada índice consome armazenamento e aumenta o tempo de escrita.
 - Consulte a [documentação oficial do Firestore sobre índices](https://firebase.google.com/docs/firestore/query-data/indexing) para detalhes avançados.
 - Ao remover uma consulta do código, considere remover o índice correspondente após confirmar que nenhuma outra consulta o utiliza.
+
+---
+
+## Organização de Mesas
+
+O módulo de **Organização de Mesas** permite que os administradores criem mesas com capacidades configuráveis e distribuam individualmente todos os convidados confirmados (titulares e acompanhantes) entre as mesas do evento.
+
+Acesso: `/admin/mesas` no painel administrativo (disponível em desktop e mobile).
+
+### Como funciona
+
+1. **Criar mesas:** defina nome/identificação e capacidade (número de lugares). Ex: "Mesa 01 — 8 lugares", "Família — 12 lugares".
+2. **Distribuir convidados:** pesquise participantes confirmados pelo nome e atribua a qualquer mesa com vagas disponíveis. Cada participante (titular ou acompanhante) é organizado individualmente.
+3. **Gerenciar ocupação:** visualize barras de progresso, transfira participantes entre mesas e remova atribuições. A capacidade é validada no servidor via transações Firestore.
+4. **Dashboard:** indicadores em tempo real de total de mesas, lugares totais, ocupados, disponíveis e convidados ainda sem mesa.
+
+### Regras de capacidade e distribuição
+
+- Cada mesa respeita sua capacidade configurada. Operações que ultrapassariam o limite são bloqueadas no servidor.
+- Um participante não pode ser atribuído a duas mesas simultaneamente (unicidade garantida por transação).
+- Não é possível reduzir a capacidade de uma mesa abaixo da ocupação atual — remova participantes primeiro.
+- Não é possível excluir mesas que possuem participantes atribuídos — remova-os primeiro.
+- Convidados inativos (`active: false`) não podem receber novas atribuições.
+- A organização **não altera** RSVP, check-in ou convites. É um módulo independente.
+
+### Integração com convidados e acompanhantes
+
+- O módulo consulta RSVPs confirmados para listar participantes disponíveis (guests + companions com `participantId` persistente).
+- Acompanhantes extras aprovados via fluxo de check-in aparecem automaticamente na lista de disponíveis.
+- Quando um convidado é desativado, sua atribuição permanece como histórico mas ele deixa de aparecer como disponível para novas atribuições.
+- Reativar um convidado não restaura automaticamente uma atribuição antiga — ele deve ser reatribuído manualmente.
+
+### Coleções Firestore
+
+| Coleção | Descrição |
+|---------|-----------|
+| `events/{eventId}/tables/{tableId}` | Mesas: `name`, `capacity`, `createdAt`, `updatedAt`, `createdBy` |
+| `events/{eventId}/tableAssignments/{assignmentId}` | Atribuições: `tableId`, `invitationId`, `participantId`, `participantName`, `participantType`, `assignedAt`, `assignedBy` |
+
+Regras de segurança: leitura e escrita restritas a administradores autenticados (`isAdmin()`).
+
+### Auditoria
+
+Todas as operações registram logs na coleção `auditLogs`:
+- `table.created` / `table.updated` / `table.deleted`
+- `table.assignment.created` / `table.assignment.removed` / `table.assignment.transferred`
+
+Cada log contém `actorId`, `timestamp`, `targetId` e metadados relevantes.
+
+### Índices Firestore necessários
+
+Atualmente **nenhum índice composto novo é necessário**. As consultas do módulo usam:
+- `tables.orderBy('name')` — índice simples automático
+- `tableAssignments.where('tableId', '==', ...)` — índice simples automático
+- `tableAssignments.where('participantId', '==', ...)` — índice simples automático
+- `tableAssignments.count()` — suportado sem índice composto
+
+Se futuramente forem adicionadas consultas combinando `where` + `orderBy` em `tableAssignments`, novos índices deverão ser declarados em `firestore.indexes.json`.
+
+### Limitações conhecidas
+
+- A busca de participantes disponíveis carrega todos os RSVPs confirmados em memória. Para eventos com milhares de confirmações, considerar paginação futura.
+- Drag-and-drop não foi implementado; toda a interação é via botões e seletores (funcional em mobile).
+- Não há exportação/impressão da lista de mesas. Pode ser adicionado futuramente.
