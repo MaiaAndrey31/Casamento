@@ -52,6 +52,7 @@ interface AvailableParticipant {
 	participantName: string;
 	participantType: 'titular' | 'companion';
 	invitationId: string;
+	alreadyAssigned?: boolean; // true se já está em outra mesa (não selecionável)
 }
 
 interface InvitationGroup {
@@ -319,17 +320,18 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	const selectEntireGroup = (group: InvitationGroup) => {
 		setSelectedParticipantIds(prev => {
 			const next = new Set(prev);
-			const allIds = [
-				group.titular?.participantId,
-				...group.companions.map(c => c.participantId),
+			// Excluir titulares já atribuídos da seleção — eles não são selecionáveis
+			const selectableIds = [
+				(group.titular && !group.titular.alreadyAssigned) ? group.titular.participantId : null,
+				...group.companions.filter(c => !c.alreadyAssigned).map(c => c.participantId),
 			].filter(Boolean) as string[];
 
-			// If all are already selected, deselect all; otherwise select all
-			const allSelected = allIds.every(id => next.has(id));
+			// If all selectable are already selected, deselect all; otherwise select all
+			const allSelected = selectableIds.length > 0 && selectableIds.every(id => next.has(id));
 			if (allSelected) {
-				allIds.forEach(id => next.delete(id));
+				selectableIds.forEach(id => next.delete(id));
 			} else {
-				allIds.forEach(id => next.add(id));
+				selectableIds.forEach(id => next.add(id));
 			}
 			return next;
 		});
@@ -690,7 +692,9 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 										].filter(Boolean) as string[];
 										const allSelected = groupIds.every(id => selectedParticipantIds.has(id));
 										const someSelected = groupIds.some(id => selectedParticipantIds.has(id));
-										const groupName = group.titular?.participantName || group.companions[0]?.participantName || 'Convite';
+										// NUNCA usar companion como fallback para o nome do cabeçalho.
+										// Usar titular disponível → nome original buscado via server action → 'Convite'
+										const groupName = group.titular?.participantName || titularNames[group.invitationId] || 'Convite';
 
 										return (
 											<div key={group.invitationId} className="rounded-xl border border-outline-variant/15 bg-surface-container-low overflow-hidden">
@@ -731,25 +735,69 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 													)}
 												</div>
 
-												{/* Expanded Companions */}
-												{isExpanded && group.companions.length > 0 && (
+												{/* Expanded: Titular + Companions */}
+												{isExpanded && (
 													<div className="border-t border-outline-variant/10 bg-surface-container-lowest/50 px-3 pb-2 pt-1">
+														{/* Titular — sempre visível na expansão, mesmo se já atribuído */}
+														{group.titular && (
+															group.titular.alreadyAssigned ? (
+																<div className="flex items-center gap-3 rounded-lg px-2 py-2 opacity-60">
+																	<div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-outline-variant/40 bg-outline-variant/20">
+																		<Check size={10} className="text-on-surface-variant" />
+																	</div>
+																	<span className="text-body-sm text-on-surface line-through">{group.titular.participantName}</span>
+																	<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+																		Titular
+																	</span>
+																	<span className="ml-auto text-[10px] font-medium text-on-surface-variant">Já em outra mesa</span>
+																</div>
+															) : (
+																<label
+																	className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low"
+																>
+																	<input
+																		type="checkbox"
+																		checked={selectedParticipantIds.has(group.titular.participantId)}
+																		onChange={() => toggleParticipant(group.titular!.participantId)}
+																		className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
+																	/>
+																	<span className="text-body-sm font-medium text-on-surface">{group.titular.participantName}</span>
+																	<span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+																		Titular
+																	</span>
+																</label>
+															)
+														)}
+														{/* Companions */}
 														{group.companions.map(companion => (
-															<label
-																key={companion.participantId}
-																className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low"
-															>
-																<input
-																	type="checkbox"
-																	checked={selectedParticipantIds.has(companion.participantId)}
-																	onChange={() => toggleParticipant(companion.participantId)}
-																	className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
-																/>
-																<span className="text-body-sm text-on-surface">{companion.participantName}</span>
-																<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
-																	Acompanhante
-																</span>
-															</label>
+															companion.alreadyAssigned ? (
+																<div key={companion.participantId} className="flex items-center gap-3 rounded-lg px-2 py-2 opacity-60">
+																	<div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-outline-variant/40 bg-outline-variant/20">
+																		<Check size={10} className="text-on-surface-variant" />
+																	</div>
+																	<span className="text-body-sm text-on-surface line-through">{companion.participantName}</span>
+																	<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+																		Acompanhante
+																	</span>
+																	<span className="ml-auto text-[10px] font-medium text-on-surface-variant">Já em outra mesa</span>
+																</div>
+															) : (
+																<label
+																	key={companion.participantId}
+																	className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low"
+																>
+																	<input
+																		type="checkbox"
+																		checked={selectedParticipantIds.has(companion.participantId)}
+																		onChange={() => toggleParticipant(companion.participantId)}
+																		className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
+																	/>
+																	<span className="text-body-sm text-on-surface">{companion.participantName}</span>
+																	<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+																		Acompanhante
+																	</span>
+																</label>
+															)
 														))}
 													</div>
 												)}

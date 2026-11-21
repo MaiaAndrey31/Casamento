@@ -664,7 +664,7 @@ function normalizeSearch(value: string): string {
 export async function listAvailableParticipants(
 	eventId: string,
 	searchTerm?: string,
-): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string }>> {
+): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean }>> {
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
 		const { FieldValue } = await import('firebase-admin/firestore');
@@ -703,7 +703,7 @@ export async function listAvailableParticipants(
 			.where('attendanceStatus', '==', 'confirmed')
 			.get();
 
-		const available: Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string }> = [];
+		const available: Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean }> = [];
 		const normalizedSearch = searchTerm ? normalizeSearch(searchTerm) : '';
 
 		for (const rsvpDoc of confirmedRsvpsSnap.docs) {
@@ -714,12 +714,25 @@ export async function listAvailableParticipants(
 
 			const rsvpData = rsvpDoc.data();
 
-			// Adicionar guests confirmados
-			const confirmedGuestIds: string[] = Array.isArray(rsvpData?.confirmedGuestIds) ? rsvpData.confirmedGuestIds : [];
-			for (const guestId of confirmedGuestIds) {
-				if (assignedParticipantIds.has(guestId)) continue;
+			// IDENTIFICAÇÃO DO TITULAR: usar invitations.guestIds[0] como fonte canônica.
+			// confirmedGuestIds do RSVP está SEMPRE vazio (submitRsvpAction passa []),
+			// então NÃO pode ser usado como fonte de titulares.
+			// guestIds[0] é o titular original cadastrado pelo administrador.
+			const invDoc = await adminDb
+				.collection('events')
+				.doc(eventId)
+				.collection('invitations')
+				.doc(invitationId)
+				.get();
 
-				// Buscar nome do guest
+			const invData = invDoc.exists ? invDoc.data() : null;
+			const guestIds: string[] = Array.isArray(invData?.guestIds) ? invData.guestIds : [];
+
+			// Adicionar todos os guests do convite como titulares potenciais
+			// (incluindo já atribuídos, para manter o nome no cabeçalho do grupo)
+			for (const guestId of guestIds) {
+				const isAlreadyAssigned = assignedParticipantIds.has(guestId);
+
 				const guestDoc = await adminDb
 					.collection('events')
 					.doc(eventId)
@@ -739,6 +752,7 @@ export async function listAvailableParticipants(
 					participantType: 'titular',
 					invitationId,
 					rsvpStatus: 'confirmed',
+					alreadyAssigned: isAlreadyAssigned,
 				});
 			}
 
