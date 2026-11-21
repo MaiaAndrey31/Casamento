@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
 	Armchair,
 	Plus,
@@ -14,13 +14,15 @@ import {
 	X,
 	Loader2,
 	AlertCircle,
+	ChevronDown,
+	ChevronUp,
 } from 'lucide-react';
 import type { TableWithOccupancy, TablesDashboardStats } from '@/types';
 import {
 	createTableAction,
 	updateTableAction,
 	deleteTableAction,
-	assignParticipantAction,
+	assignGroupAction,
 	unassignParticipantAction,
 	transferParticipantAction,
 	listAvailableParticipantsAction,
@@ -44,6 +46,19 @@ interface TableFormData {
 	capacity: string;
 }
 
+interface AvailableParticipant {
+	participantId: string;
+	participantName: string;
+	participantType: 'titular' | 'companion';
+	invitationId: string;
+}
+
+interface InvitationGroup {
+	invitationId: string;
+	titular: AvailableParticipant | null;
+	companions: AvailableParticipant[];
+}
+
 // ============================================================================
 // COMPONENT
 // ============================================================================
@@ -59,17 +74,17 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	const [editingTableId, setEditingTableId] = useState<string | null>(null);
 	const [formData, setFormData] = useState<TableFormData>({ name: '', capacity: '' });
 
-	// Assignment modal
+	// Assignment modal state
 	const [assignModalOpen, setAssignModalOpen] = useState(false);
 	const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
 	const [searchTerm, setSearchTerm] = useState('');
-	const [availableParticipants, setAvailableParticipants] = useState<Array<{
-		participantId: string;
-		participantName: string;
-		participantType: 'titular' | 'companion';
-		invitationId: string;
-	}>>([]);
+	const [availableParticipants, setAvailableParticipants] = useState<AvailableParticipant[]>([]);
 	const [loadingParticipants, setLoadingParticipants] = useState(false);
+	const [loadError, setLoadError] = useState<string | null>(null);
+
+	// Group selection state
+	const [selectedParticipantIds, setSelectedParticipantIds] = useState<Set<string>>(new Set());
+	const [expandedInvitationId, setExpandedInvitationId] = useState<string | null>(null);
 
 	// Transfer modal
 	const [transferModalOpen, setTransferModalOpen] = useState(false);
@@ -81,6 +96,10 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 
 	// Search filter for tables
 	const [tableSearch, setTableSearch] = useState('');
+
+	// Refs for focus management
+	const assignModalRef = useRef<HTMLDivElement>(null);
+	const searchInputRef = useRef<HTMLInputElement>(null);
 
 	const showFeedback = useCallback((type: 'success' | 'error', message: string) => {
 		setFeedback({ type, message });
@@ -162,42 +181,146 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 		setSelectedTableId(tableId);
 		setAssignModalOpen(true);
 		setSearchTerm('');
+		setSelectedParticipantIds(new Set());
+		setExpandedInvitationId(null);
+		setLoadError(null);
 		setLoadingParticipants(true);
 
 		try {
 			const result = await listAvailableParticipantsAction({});
 			if (result.success && result.data) {
 				setAvailableParticipants(result.data);
+				if (result.data.length === 0) {
+					setLoadError(null); // Not an error — just no eligible participants
+				}
 			} else {
-				showFeedback('error', result.error || 'Erro ao carregar participantes disponíveis.');
+				setLoadError(result.error || 'Erro ao carregar participantes disponíveis.');
 			}
 		} catch {
-			showFeedback('error', 'Erro ao carregar participantes disponíveis.');
+			setLoadError('Erro ao carregar participantes disponíveis.');
 		} finally {
 			setLoadingParticipants(false);
 		}
 	};
 
-	const handleAssign = async (participant: typeof availableParticipants[0]) => {
-		if (!selectedTableId) return;
+	// Focus search input when modal opens
+	useEffect(() => {
+		if (assignModalOpen && searchInputRef.current) {
+			setTimeout(() => searchInputRef.current?.focus(), 100);
+		}
+	}, [assignModalOpen]);
+
+	// Close modal on Escape
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				if (assignModalOpen) setAssignModalOpen(false);
+				if (transferModalOpen) setTransferModalOpen(false);
+				if (deleteConfirmId) setDeleteConfirmId(null);
+				if (modalMode) { setModalMode(null); setEditingTableId(null); }
+			}
+		};
+		window.addEventListener('keydown', handleKeyDown);
+		return () => window.removeEventListener('keydown', handleKeyDown);
+	}, [assignModalOpen, transferModalOpen, deleteConfirmId, modalMode]);
+
+	// Group participants by invitationId
+	const invitationGroups: InvitationGroup[] = (() => {
+		const groups = new Map<string, InvitationGroup>();
+
+		for (const p of availableParticipants) {
+			if (!groups.has(p.invitationId)) {
+				groups.set(p.invitationId, { invitationId: p.invitationId, titular: null, companions: [] });
+			}
+			const group = groups.get(p.invitationId)!;
+			if (p.participantType === 'titular') {
+				group.titular = p;
+			} else {
+				group.companions.push(p);
+			}
+		}
+
+		return Array.from(groups.values()).sort((a, b) => {
+			const nameA = a.titular?.participantName || a.companions[0]?.participantName || '';
+			const nameB = b.titular?.participantName || b.companions[0]?.participantName || '';
+			return nameA.localeCompare(nameB);
+		});
+	})();
+
+	// Filter groups by search term
+	const normalizedSearch = searchTerm.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+	const filteredGroups = normalizedSearch
+		? invitationGroups.filter(g => {
+			const allNames = [
+				g.titular?.participantName,
+				...g.companions.map(c => c.participantName),
+			].filter(Boolean) as string[];
+			return allNames.some(name =>
+				name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(normalizedSearch),
+			);
+		})
+		: invitationGroups;
+
+	const toggleParticipant = (participantId: string) => {
+		setSelectedParticipantIds(prev => {
+			const next = new Set(prev);
+			if (next.has(participantId)) {
+				next.delete(participantId);
+			} else {
+				next.add(participantId);
+			}
+			return next;
+		});
+	};
+
+	const selectEntireGroup = (group: InvitationGroup) => {
+		setSelectedParticipantIds(prev => {
+			const next = new Set(prev);
+			const allIds = [
+				group.titular?.participantId,
+				...group.companions.map(c => c.participantId),
+			].filter(Boolean) as string[];
+
+			// If all are already selected, deselect all; otherwise select all
+			const allSelected = allIds.every(id => next.has(id));
+			if (allSelected) {
+				allIds.forEach(id => next.delete(id));
+			} else {
+				allIds.forEach(id => next.add(id));
+			}
+			return next;
+		});
+	};
+
+	const selectedParticipants = availableParticipants.filter(p => selectedParticipantIds.has(p.participantId));
+	const selectedCount = selectedParticipants.length;
+
+	const selectedTable = tables.find(t => t.id === selectedTableId);
+	const availableSeats = selectedTable ? selectedTable.availableSeats : 0;
+	const exceedsCapacity = selectedCount > availableSeats;
+
+	const handleAssignGroup = async () => {
+		if (!selectedTableId || selectedCount === 0 || exceedsCapacity) return;
 
 		setLoading(true);
-		const result = await assignParticipantAction({
+		const result = await assignGroupAction({
 			tableId: selectedTableId,
-			participantId: participant.participantId,
-			participantName: participant.participantName,
-			participantType: participant.participantType,
-			invitationId: participant.invitationId,
+			participants: selectedParticipants.map(p => ({
+				participantId: p.participantId,
+				participantName: p.participantName,
+				participantType: p.participantType,
+				invitationId: p.invitationId,
+			})),
 		});
 		setLoading(false);
 
 		if (result.success) {
-			showFeedback('success', `${participant.participantName} atribuído(a) com sucesso.`);
-			// Remove from available list locally
-			setAvailableParticipants(prev => prev.filter(p => p.participantId !== participant.participantId));
+			showFeedback('success', result.message || `${selectedCount} participante(s) atribuído(s) com sucesso.`);
+			setAssignModalOpen(false);
+			setSelectedParticipantIds(new Set());
 			await refreshData();
 		} else {
-			showFeedback('error', result.error || 'Erro ao atribuir participante.');
+			showFeedback('error', result.error || 'Erro ao atribuir participantes.');
 		}
 	};
 
@@ -438,61 +561,222 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 				</ModalOverlay>
 			)}
 
-			{/* Assign Participant Modal */}
+			{/* Assign Participant Modal — Group Selection */}
 			{assignModalOpen && (
-				<ModalOverlay onClose={() => { setAssignModalOpen(false); setSelectedTableId(null); }}>
-					<div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl bg-surface-container-lowest shadow-2xl">
-						<div className="border-b border-outline-variant/10 p-4">
-							<h2 className="text-headline-sm font-bold text-primary">Atribuir Participante</h2>
-							<p className="text-body-xs text-on-surface-variant">
-								Selecione um participante disponível para adicionar à mesa.
-							</p>
+				<ModalOverlay onClose={() => { setAssignModalOpen(false); setSelectedParticipantIds(new Set()); }}>
+					<div
+						ref={assignModalRef}
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="assign-modal-title"
+						className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-surface-container-lowest shadow-2xl"
+					>
+						{/* Header */}
+						<div className="flex items-center justify-between border-b border-outline-variant/10 p-4">
+							<div>
+								<h2 id="assign-modal-title" className="text-headline-sm font-bold text-primary">
+									Adicionar Participantes
+								</h2>
+								<p className="text-body-xs text-on-surface-variant">
+									Selecione os participantes do convite para atribuir à mesa.
+								</p>
+							</div>
+							<button
+								onClick={() => { setAssignModalOpen(false); setSelectedParticipantIds(new Set()); }}
+								className="rounded-lg p-2 text-on-surface-variant hover:bg-surface-container-low"
+								aria-label="Fechar"
+							>
+								<X size={20} />
+							</button>
 						</div>
 
+						{/* Search */}
 						<div className="border-b border-outline-variant/10 p-3">
 							<div className="relative">
 								<Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
 								<input
+									ref={searchInputRef}
 									type="text"
-									placeholder="Buscar por nome..."
+									placeholder="Buscar por nome do convidado ou acompanhante..."
 									value={searchTerm}
 									onChange={e => setSearchTerm(e.target.value)}
-									className="w-full rounded-lg border border-outline-variant/30 bg-surface py-2 pl-9 pr-3 text-body-sm text-on-surface focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim"
+									className="w-full rounded-lg border border-outline-variant/30 bg-surface py-2.5 pl-9 pr-3 text-body-sm text-on-surface focus:border-tertiary-fixed-dim focus:outline-none focus:ring-1 focus:ring-tertiary-fixed-dim"
 								/>
 							</div>
 						</div>
 
+						{/* Participants List */}
 						<div className="flex-1 overflow-y-auto p-2">
 							{loadingParticipants ? (
-								<div className="flex items-center justify-center py-8">
+								<div className="flex flex-col items-center justify-center py-12">
 									<Loader2 size={32} className="animate-spin text-on-surface-variant/30" />
+									<p className="mt-3 text-body-sm text-on-surface-variant">Carregando participantes...</p>
 								</div>
-							) : availableParticipants.filter(p =>
-								p.participantName.toLowerCase().includes(searchTerm.toLowerCase()),
-							).length === 0 ? (
-								<div className="py-8 text-center text-body-sm text-on-surface-variant">
-									Nenhum participante disponível encontrado.
+							) : loadError ? (
+								<div className="flex flex-col items-center justify-center py-12">
+									<AlertCircle size={32} className="text-error" />
+									<p className="mt-3 text-body-sm text-error">{loadError}</p>
+									<button
+										onClick={() => openAssignModal(selectedTableId!)}
+										className="mt-3 text-label-sm font-bold uppercase tracking-wider text-primary hover:underline"
+									>
+										Tentar novamente
+									</button>
+								</div>
+							) : filteredGroups.length === 0 ? (
+								<div className="py-12 text-center">
+									<Users size={32} className="mx-auto mb-3 text-on-surface-variant/30" />
+									<p className="text-body-sm font-medium text-on-surface-variant">
+										{normalizedSearch
+											? 'Nenhum participante encontrado para esta busca.'
+											: 'Nenhum participante disponível para atribuição.'}
+									</p>
+									{!normalizedSearch && (
+										<p className="mt-1 text-body-xs text-on-surface-variant/60">
+											Todos os convidados confirmados já estão atribuídos a mesas.
+										</p>
+									)}
 								</div>
 							) : (
-								<div className="space-y-1">
-									{availableParticipants
-										.filter(p => p.participantName.toLowerCase().includes(searchTerm.toLowerCase()))
-										.map(participant => (
-											<button
-												key={participant.participantId}
-												onClick={() => handleAssign(participant)}
-												disabled={loading}
-												className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-body-sm hover:bg-surface-container-low disabled:opacity-50"
-											>
-												<div>
-													<span className="font-medium text-on-surface">{participant.participantName}</span>
-													<span className="ml-2 rounded-full bg-surface-container-low px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
-														{participant.participantType === 'titular' ? 'Convidado' : 'Acompanhante'}
-													</span>
+								<div className="space-y-2">
+									{filteredGroups.map(group => {
+										const isExpanded = expandedInvitationId === group.invitationId;
+										const groupIds = [
+											group.titular?.participantId,
+											...group.companions.map(c => c.participantId),
+										].filter(Boolean) as string[];
+										const allSelected = groupIds.every(id => selectedParticipantIds.has(id));
+										const someSelected = groupIds.some(id => selectedParticipantIds.has(id));
+										const groupName = group.titular?.participantName || group.companions[0]?.participantName || 'Convite';
+
+										return (
+											<div key={group.invitationId} className="rounded-xl border border-outline-variant/15 bg-surface-container-low overflow-hidden">
+												{/* Group Header */}
+												<div className="flex items-center gap-3 p-3">
+													<button
+														onClick={() => selectEntireGroup(group)}
+														className={`flex h-6 w-6 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+															allSelected
+																? 'border-primary bg-primary text-white'
+																: someSelected
+																	? 'border-primary bg-primary/20 text-primary'
+																	: 'border-outline-variant/40 text-transparent'
+														}`}
+														aria-label={allSelected ? `Desmarcar ${groupName}` : `Selecionar ${groupName}`}
+													>
+														<Check size={14} />
+													</button>
+
+													<div className="flex-1 min-w-0">
+														<p className="truncate text-body-sm font-semibold text-on-surface">
+															{groupName}
+														</p>
+														<p className="text-body-xs text-on-surface-variant">
+															{groupIds.length} {groupIds.length === 1 ? 'participante' : 'participantes'}
+															{group.companions.length > 0 && ` · ${group.companions.length} acompanhante${group.companions.length > 1 ? 's' : ''}`}
+														</p>
+													</div>
+
+													{group.companions.length > 0 && (
+														<button
+															onClick={() => setExpandedInvitationId(isExpanded ? null : group.invitationId)}
+															className="shrink-0 rounded-lg p-1.5 text-on-surface-variant hover:bg-surface"
+															aria-label={isExpanded ? 'Recolher' : 'Expandir'}
+														>
+															{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+														</button>
+													)}
 												</div>
-												<Plus size={16} className="text-primary" />
-											</button>
-										))}
+
+												{/* Expanded Companions */}
+												{isExpanded && group.companions.length > 0 && (
+													<div className="border-t border-outline-variant/10 bg-surface-container-lowest/50 px-3 pb-2 pt-1">
+														{group.companions.map(companion => (
+															<label
+																key={companion.participantId}
+																className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low"
+															>
+																<input
+																	type="checkbox"
+																	checked={selectedParticipantIds.has(companion.participantId)}
+																	onChange={() => toggleParticipant(companion.participantId)}
+																	className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
+																/>
+																<span className="text-body-sm text-on-surface">{companion.participantName}</span>
+																<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+																	Acompanhante
+																</span>
+															</label>
+														))}
+													</div>
+												)}
+											</div>
+										);
+									})}
+								</div>
+							)}
+						</div>
+
+						{/* Footer with Preview and Action */}
+						<div className="border-t border-outline-variant/10 p-4">
+							{selectedCount > 0 ? (
+								<div className="space-y-3">
+									<div className="rounded-lg bg-surface-container-low p-3">
+										<p className="text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">
+											Prévia da Atribuição
+										</p>
+										<div className="mt-2 space-y-1">
+											{selectedParticipants.slice(0, 5).map(p => (
+												<p key={p.participantId} className="text-body-xs text-on-surface">
+													• {p.participantName}
+													<span className="ml-1 text-on-surface-variant">
+														({p.participantType === 'titular' ? 'Titular' : 'Acompanhante'})
+													</span>
+												</p>
+											))}
+											{selectedCount > 5 && (
+												<p className="text-body-xs text-on-surface-variant">
+													...e mais {selectedCount - 5} participante(s)
+												</p>
+											)}
+										</div>
+										<div className="mt-2 flex items-center gap-4 text-body-xs">
+											<span className="font-medium text-on-surface">
+												Lugares necessários: <strong>{selectedCount}</strong>
+											</span>
+											<span className={`font-medium ${exceedsCapacity ? 'text-error' : 'text-green-600'}`}>
+												Disponíveis na mesa: <strong>{availableSeats}</strong>
+											</span>
+										</div>
+									</div>
+
+									{exceedsCapacity && (
+										<div className="flex items-start gap-2 rounded-lg bg-error-container/20 p-3 text-body-xs text-error">
+											<AlertCircle size={16} className="shrink-0 mt-0.5" />
+											Capacidade insuficiente. Reduza a seleção ou escolha outra mesa.
+										</div>
+									)}
+
+									<div className="flex gap-3">
+										<button
+											onClick={() => setSelectedParticipantIds(new Set())}
+											className="flex-1 rounded-lg border border-outline-variant/30 bg-surface py-3 text-label-sm font-medium text-on-surface-variant hover:bg-surface-container-low"
+										>
+											Limpar Seleção
+										</button>
+										<button
+											onClick={handleAssignGroup}
+											disabled={loading || exceedsCapacity || selectedCount === 0}
+											className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-3 text-label-sm font-bold uppercase tracking-wider text-white disabled:opacity-50"
+										>
+											{loading && <Loader2 size={16} className="animate-spin" />}
+											Adicionar {selectedCount} {selectedCount === 1 ? 'participante' : 'participantes'}
+										</button>
+									</div>
+								</div>
+							) : (
+								<div className="text-center text-body-sm text-on-surface-variant">
+									Selecione pelo menos um participante para continuar.
 								</div>
 							)}
 						</div>
@@ -682,8 +966,11 @@ function TableCard({ table, onEdit, onDelete, onAssign, onUnassign, onTransfer, 
 
 function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
 	return (
-		<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
-			<div onClick={e => e.stopPropagation()} className="w-full">
+		<div
+			className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+			onClick={onClose}
+		>
+			<div onClick={e => e.stopPropagation()} className="w-full sm:max-w-[inherit]">
 				{children}
 			</div>
 		</div>

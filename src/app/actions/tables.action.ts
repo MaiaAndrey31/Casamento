@@ -321,6 +321,187 @@ export async function unassignParticipantAction(
 	}
 }
 
+const assignGroupSchema = z.object({
+	tableId: z.string().min(1),
+	participants: z.array(z.object({
+ participantId: z.string().min(1),
+ participantName: z.string().min(1),
+ participantType: z.enum(['titular', 'companion']),
+ invitationId: z.string().min(1),
+	})).min(1, 'Selecione pelo menos um participante.'),
+});
+
+/**
+ * Atribui múltiplos participantes de uma vez em transação atômica.
+ * Valida capacidade total, duplicidade e status ativo de cada titular.
+ * Se qualquer validação falhar, nenhuma atribuição do grupo é concluída.
+ */
+export async function assignGroupAction(
+	formData: Record<string, unknown>,
+): Promise<ApiResponse<{ assignedCount: number }>> {
+	let session;
+	try {
+ session = await requireAdminSession();
+	} catch {
+ return { success: false, error: 'Sessão administrativa inválida ou expirada.' };
+	}
+
+	const validation = assignGroupSchema.safeParse(formData);
+	if (!validation.success) {
+ return {
+ success: false,
+ error: validation.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; '),
+ };
+	}
+
+	const eventId = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
+
+	try {
+ const { adminDb } = await import('@/lib/firebase/admin');
+ const { FieldValue } = await import('firebase-admin/firestore');
+
+ let assignedCount = 0;
+
+ await adminDb.runTransaction(async (transaction) => {
+ // 1. Verificar capacidade da mesa
+ const tableRef = adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('tables')
+ .doc(validation.data.tableId);
+
+ const tableDoc = await transaction.get(tableRef);
+ if (!tableDoc.exists) {
+ throw new Error('TABLE_NOT_FOUND');
+ }
+
+ const capacity = tableDoc.data()?.capacity ?? 0;
+
+ // Contar atribuições atuais
+ const assignmentsCountSnap = await adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('tableAssignments')
+ .where('tableId', '==', validation.data.tableId)
+ .count()
+ .get();
+
+ const currentOccupancy = assignmentsCountSnap.data().count ?? 0;
+ const requestedCount = validation.data.participants.length;
+
+ if (currentOccupancy + requestedCount > capacity) {
+ throw new Error(`TABLE_CAPACITY_EXCEEDED:${capacity}:${currentOccupancy}:${requestedCount}`);
+ }
+
+ // 2. Validar cada participante
+ for (const participant of validation.data.participants) {
+ // Verificar duplicidade
+ const existingSnap = await adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('tableAssignments')
+ .where('participantId', '==', participant.participantId)
+ .limit(1)
+ .get();
+
+ if (!existingSnap.empty) {
+ throw new Error(`DUPLICATE:${participant.participantName}`);
+ }
+
+ // Se titular, verificar se está ativo
+ if (participant.participantType === 'titular') {
+ const guestRef = adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('guests')
+ .doc(participant.participantId);
+
+ const guestDoc = await transaction.get(guestRef);
+ if (guestDoc.exists && guestDoc.data()?.active === false) {
+ throw new Error(`GUEST_INACTIVE:${participant.participantName}`);
+ }
+ }
+ }
+
+ // 3. Criar todas as atribuições
+ for (const participant of validation.data.participants) {
+ const assignmentRef = adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('tableAssignments')
+ .doc();
+
+ transaction.set(assignmentRef, {
+ eventId,
+ tableId: validation.data.tableId,
+ invitationId: participant.invitationId,
+ participantId: participant.participantId,
+ participantName: participant.participantName,
+ participantType: participant.participantType,
+ assignedAt: FieldValue.serverTimestamp(),
+ assignedBy: session.uid,
+ });
+ }
+
+ assignedCount = requestedCount;
+ });
+
+ // Audit log (fora da transação)
+ const { adminDb: db } = await import('@/lib/firebase/admin');
+ const { FieldValue: FV } = await import('firebase-admin/firestore');
+ await db.collection('events').doc(eventId).collection('auditLogs').add({
+ eventId,
+ action: 'table.assignment.group_created',
+ actorId: session.uid,
+ targetId: validation.data.tableId,
+ targetType: 'tableAssignment',
+ timestamp: FV.serverTimestamp(),
+ metadata: {
+ tableId: validation.data.tableId,
+ assignedCount,
+ participants: validation.data.participants.map(p => ({
+ participantId: p.participantId,
+ participantName: p.participantName,
+ participantType: p.participantType,
+ })),
+ },
+ });
+
+ revalidatePath('/admin/mesas');
+
+ return {
+ success: true,
+ data: { assignedCount },
+ message: `${assignedCount} participante(s) atribuído(s) com sucesso.`,
+ };
+	} catch (e) {
+ const message = e instanceof Error ? e.message : String(e);
+
+ if (message === 'TABLE_NOT_FOUND') {
+ return { success: false, error: 'Mesa não encontrada.' };
+ }
+ if (message.startsWith('TABLE_CAPACITY_EXCEEDED:')) {
+ const [, cap, occ, req] = message.split(':');
+ const available = parseInt(cap, 10) - parseInt(occ, 10);
+ return {
+ success: false,
+ error: `Capacidade insuficiente. Mesa tem ${available} vaga(s) disponível(is), mas ${req} participante(s) foram selecionado(s).`,
+ };
+ }
+ if (message.startsWith('DUPLICATE:')) {
+ const name = message.split(':')[1];
+ return { success: false, error: `${name} já está atribuído(a) a outra mesa.` };
+ }
+ if (message.startsWith('GUEST_INACTIVE:')) {
+ const name = message.split(':')[1];
+ return { success: false, error: `${name} está desativado(a) e não pode ser atribuído(a).` };
+ }
+
+ console.error('[TablesAction] Falha ao atribuir grupo:', message);
+ return { success: false, error: `Falha ao atribuir grupo: ${message}` };
+	}
+}
+
 /**
  * Recarrega dados completos de mesas e stats do dashboard.
  * Server Action wrapper para uso em Client Components após mutações.

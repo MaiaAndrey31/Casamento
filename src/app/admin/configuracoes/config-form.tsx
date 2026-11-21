@@ -39,11 +39,56 @@ type ConfigFormInput = {
 };
 
 /**
+ * Calcula o offset UTC (em minutos) de um timezone para uma data específica.
+ * Usa busca binária para encontrar o instante UTC que, quando formatado no
+ * timezone alvo, produz os valores locais desejados. Independente do fuso do navegador.
+ */
+function getUtcOffsetForLocal(
+	year: number, month: number, day: number,
+	hour: number, minute: number,
+	timezone: string,
+): number {
+	const fmt = new Intl.DateTimeFormat('en-US', {
+		timeZone: timezone,
+		year: 'numeric', month: '2-digit', day: '2-digit',
+		hour: '2-digit', minute: '2-digit', second: '2-digit',
+		hour12: false,
+	});
+
+	const parseParts = (ts: number) => {
+		const parts = fmt.formatToParts(new Date(ts));
+		const g = (type: string) => parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10);
+		return { y: g('year'), m: g('month'), d: g('day'), h: g('hour') === 24 ? 0 : g('hour'), min: g('minute') };
+	};
+
+	// Estimativa inicial: assumir offset 0
+	let guess = Date.UTC(year, month - 1, day, hour, minute, 0);
+
+	// Refinar: formatar guess no tz alvo, calcular diferença, ajustar
+	for (let i = 0; i < 3; i++) {
+		const p = parseParts(guess);
+		const localAsUtc = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, 0);
+		const diff = Date.UTC(year, month - 1, day, hour, minute, 0) - localAsUtc;
+		guess += diff;
+	}
+
+	// Calcular offset final: diferença entre UTC real e os valores locais interpretados como UTC
+	const finalParts = parseParts(guess);
+	const finalLocalAsUtc = Date.UTC(finalParts.y, finalParts.m - 1, finalParts.d, finalParts.h, finalParts.min, 0);
+	const offsetMs = guess - finalLocalAsUtc;
+
+	return Math.round(offsetMs / 60000);
+}
+
+/**
  * Converte string datetime-local ("2026-12-12T19:00") + timezone para ISO 8601 completo.
  *
  * O input datetime-local não contém timezone. Interpretamos os componentes
  * (ano, mês, dia, hora, minuto) como valores literais no fuso horário configurado,
  * calculando o offset UTC correto para aquela data específica (respeitando DST).
+ *
+ * Independente do fuso horário do navegador — usa apenas Intl.DateTimeFormat
+ * com o timezone explícito.
  *
  * Retorna string vazia se o input estiver vazio ou inválido.
  */
@@ -59,45 +104,17 @@ function localToISO(localValue: string, tz: string): string {
 		if ([year, month, day, hour, minute].some((v) => isNaN(v))) return '';
 
 		const timezone = tz || 'America/Sao_Paulo';
+		// getUtcOffsetForLocal returns minutes such that UTC = local + offset.
+		// ISO 8601 offset is the opposite sign: local = UTC + isoOffset.
+		// So isoOffset = -offset. E.g., BRT offset=+180 → ISO offset=-03:00.
+		const rawOffsetMin = getUtcOffsetForLocal(year, month, day, hour, minute, timezone);
+		const isoOffsetMin = -rawOffsetMin;
 
-		// Estratégia: criar um timestamp UTC provisório e medir quanto ele
-		// "desloca" quando formatado no timezone alvo. A diferença é o offset.
-		const utcProvisional = Date.UTC(year, month - 1, day, hour, minute, 0);
-
-		const fmt = new Intl.DateTimeFormat('en-US', {
-			timeZone: timezone,
-			year: 'numeric',
-			month: '2-digit',
-			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
-			hour12: false,
-		});
-
-		const parts = fmt.formatToParts(new Date(utcProvisional));
-		const get = (type: string) =>
-			parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10);
-
-		const tzY = get('year');
-		const tzM = get('month');
-		const tzD = get('day');
-		const tzH = get('hour');
-		const tzMin = get('minute');
-
-		// Timestamp que o timezone alvo representa para esses mesmos valores literais
-		const tzAsUTC = Date.UTC(tzY, tzM - 1, tzD, tzH, tzMin, 0);
-
-		// Offset em milissegundos: quanto o tz está à frente (+) ou atrás (-) do UTC
-		const offsetMs = utcProvisional - tzAsUTC;
-
-		// Construir ISO 8601 com offset explícito
 		const pad = (n: number) => String(n).padStart(2, '0');
 		const base = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00`;
 
-		const totalOffsetMin = Math.round(offsetMs / 60000);
-		const sign = totalOffsetMin >= 0 ? '+' : '-';
-		const absMin = Math.abs(totalOffsetMin);
+		const sign = isoOffsetMin >= 0 ? '+' : '-';
+		const absMin = Math.abs(isoOffsetMin);
 		const offH = pad(Math.floor(absMin / 60));
 		const offM = pad(absMin % 60);
 
@@ -109,19 +126,43 @@ function localToISO(localValue: string, tz: string): string {
 
 /**
  * Converte ISO 8601 para formato datetime-local ("YYYY-MM-DDTHH:mm").
+ * Usa Intl.DateTimeFormat com o timezone configurado para garantir que
+ * os valores exibidos no formulário correspondam ao fuso do evento,
+ * independentemente do fuso do navegador.
+ *
  * Retorna string vazia se o input for inválido ou vazio.
  */
-function isoToLocal(isoValue: string | null | undefined): string {
+function isoToLocal(isoValue: string | null | undefined, tz?: string): string {
 	if (!isoValue) return '';
 	try {
 		const date = new Date(isoValue);
 		if (isNaN(date.getTime())) return '';
-		// Formatar para datetime-local: YYYY-MM-DDTHH:mm
-		const year = date.getFullYear();
-		const month = String(date.getMonth() + 1).padStart(2, '0');
-		const day = String(date.getDate()).padStart(2, '0');
-		const hours = String(date.getHours()).padStart(2, '0');
-		const minutes = String(date.getMinutes()).padStart(2, '0');
+
+		const timezone = tz || 'America/Sao_Paulo';
+		const fmt = new Intl.DateTimeFormat('en-CA', {
+			timeZone: timezone,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false,
+		});
+
+		const parts = fmt.formatToParts(date);
+		const get = (type: string) =>
+			parts.find((p) => p.type === type)?.value ?? '00';
+
+		// en-CA locale formats as YYYY-MM-DD, which matches datetime-local
+		const year = get('year');
+		const month = get('month');
+		const day = get('day');
+		let hours = get('hour');
+		const minutes = get('minute');
+
+		// Intl may return "24" for midnight; normalize to "00"
+		if (hours === '24') hours = '00';
+
 		return `${year}-${month}-${day}T${hours}:${minutes}`;
 	} catch {
 		return '';
@@ -146,11 +187,13 @@ export function ConfigForm({ event }: ConfigFormProps) {
 	const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 	const [statusMessage, setStatusMessage] = useState('');
 
+	const eventTimezone = event?.timezone || 'America/Sao_Paulo';
+
 	const form = useForm<ConfigFormInput>({
 		defaultValues: {
 			coupleNames: event?.coupleNames || 'Andrey & Amanda',
-			eventDateLocal: isoToLocal(event?.eventDate) || '2026-12-12T19:00',
-			timezone: event?.timezone || 'America/Sao_Paulo',
+			eventDateLocal: isoToLocal(event?.eventDate, eventTimezone) || '2026-12-12T19:00',
+			timezone: eventTimezone,
 			ceremonyTime: event?.ceremonyTime || '19:00',
 			receptionTime: event?.receptionTime || '',
 			venueName: event?.venueName || '',
@@ -158,7 +201,7 @@ export function ConfigForm({ event }: ConfigFormProps) {
 			mapsUrl: event?.mapsUrl || '',
 			wazeUrl: event?.wazeUrl || '',
 			dressCode: event?.dressCode || '',
-			rsvpDeadlineLocal: isoToLocal(event?.rsvpDeadline) || '',
+			rsvpDeadlineLocal: isoToLocal(event?.rsvpDeadline, eventTimezone) || '',
 			rsvpEnabled: event?.rsvpEnabled ?? true,
 			checkInEnabled: event?.checkInEnabled ?? false,
 			heroMessage: event?.heroMessage || '',

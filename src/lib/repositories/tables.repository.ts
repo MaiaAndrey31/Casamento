@@ -641,8 +641,25 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 }
 
 /**
+ * Normaliza string para busca: minúsculas, sem acentos, trim.
+ */
+function normalizeSearch(value: string): string {
+	return value
+		.toLowerCase()
+		.normalize('NFD')
+		.replace(/[̀-ͯ]/g, '')
+		.trim();
+}
+
+/**
  * Lista participantes disponíveis para atribuição (não atribuídos a nenhuma mesa).
  * Retorna guests ativos confirmados + companions de RSVPs confirmados.
+ *
+ * IMPORTANTE: Companions sem participantId persistente recebem um UUID gerado
+ * via ensureCompanionIds() e são persistidos de volta no RSVP para garantir
+ * consistência futura. Isso alinha os critérios com getTablesDashboardStats.
+ *
+ * Também filtra convites revogados/expirados para consistência com o dashboard.
  */
 export async function listAvailableParticipants(
 	eventId: string,
@@ -650,6 +667,8 @@ export async function listAvailableParticipants(
 ): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string }>> {
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
+		const { FieldValue } = await import('firebase-admin/firestore');
+		const { ensureCompanionIds } = await import('@/lib/checkin/participant-ids');
 
 		// Buscar todas as atribuições existentes
 		const allAssignmentsSnap = await adminDb
@@ -663,6 +682,19 @@ export async function listAvailableParticipants(
 			assignedParticipantIds.add(doc.data()?.participantId);
 		});
 
+		// Buscar convites ativos para filtrar RSVPs de convites revogados
+		const activeInvitationsSnap = await adminDb
+			.collection('events')
+			.doc(eventId)
+			.collection('invitations')
+			.where('invitationStatus', '==', 'active')
+			.get();
+
+		const activeInvitationIds = new Set<string>();
+		activeInvitationsSnap.docs.forEach(doc => {
+			activeInvitationIds.add(doc.id);
+		});
+
 		// Buscar RSVPs confirmados
 		const confirmedRsvpsSnap = await adminDb
 			.collection('events')
@@ -672,10 +704,15 @@ export async function listAvailableParticipants(
 			.get();
 
 		const available: Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string }> = [];
+		const normalizedSearch = searchTerm ? normalizeSearch(searchTerm) : '';
 
 		for (const rsvpDoc of confirmedRsvpsSnap.docs) {
-			const rsvpData = rsvpDoc.data();
 			const invitationId = rsvpDoc.id;
+
+			// Ignorar RSVPs de convites revogados/expirados
+			if (!activeInvitationIds.has(invitationId)) continue;
+
+			const rsvpData = rsvpDoc.data();
 
 			// Adicionar guests confirmados
 			const confirmedGuestIds: string[] = Array.isArray(rsvpData?.confirmedGuestIds) ? rsvpData.confirmedGuestIds : [];
@@ -694,7 +731,7 @@ export async function listAvailableParticipants(
 
 				const guestName = guestDoc.data()?.fullName || 'Desconhecido';
 
-				if (searchTerm && !guestName.toLowerCase().includes(searchTerm.toLowerCase())) continue;
+				if (normalizedSearch && !normalizeSearch(guestName).includes(normalizedSearch)) continue;
 
 				available.push({
 					participantId: guestId,
@@ -705,14 +742,43 @@ export async function listAvailableParticipants(
 				});
 			}
 
-			// Adicionar companions
-			const companions: Array<{ participantId?: string; name?: string }> = Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
-			for (const companion of companions) {
-				if (!companion.participantId) continue;
+			// Adicionar companions — gerar participantId persistente se necessário
+			const rawCompanions: Array<{ participantId?: string; name?: string; isMinor?: boolean; age?: number }> =
+				Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
+
+			// ensureCompanionIds gera UUIDs para companions sem participantId
+			const companionsWithIds = ensureCompanionIds(
+				rawCompanions.map(c => ({
+					name: c.name || 'Acompanhante',
+					isMinor: Boolean(c.isMinor),
+					age: c.age,
+					participantId: c.participantId,
+				})),
+			);
+
+			// Se algum companion recebeu novo ID, persistir de volta no RSVP
+			const hasNewIds = companionsWithIds.some((c, i) => !rawCompanions[i]?.participantId);
+			if (hasNewIds) {
+				try {
+					await adminDb
+						.collection('events')
+						.doc(eventId)
+						.collection('rsvps')
+						.doc(invitationId)
+						.update({
+							companions: companionsWithIds,
+							updatedAt: FieldValue.serverTimestamp(),
+						});
+				} catch (e) {
+					console.warn('[TablesRepository] Falha ao persistir participantIds de companions:', e);
+				}
+			}
+
+			for (const companion of companionsWithIds) {
 				if (assignedParticipantIds.has(companion.participantId)) continue;
 
 				const companionName = companion.name || 'Acompanhante';
-				if (searchTerm && !companionName.toLowerCase().includes(searchTerm.toLowerCase())) continue;
+				if (normalizedSearch && !normalizeSearch(companionName).includes(normalizedSearch)) continue;
 
 				available.push({
 					participantId: companion.participantId,
@@ -724,7 +790,7 @@ export async function listAvailableParticipants(
 			}
 		}
 
-		return available.sort((a, b) => a.participantName.localeCompare(b.participantName));
+		return available.sort((a, b) => normalizeSearch(a.participantName).localeCompare(normalizeSearch(b.participantName)));
 	} catch (e) {
 		console.error('[TablesRepository] Falha ao listar participantes disponíveis:', e);
 		return [];
