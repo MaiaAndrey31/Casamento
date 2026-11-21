@@ -27,6 +27,7 @@ import {
 	transferParticipantAction,
 	listAvailableParticipantsAction,
 	refreshTablesDataAction,
+	getInvitationTitularNamesAction,
 } from '@/app/actions/tables.action';
 
 // ============================================================================
@@ -224,6 +225,46 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 		return () => window.removeEventListener('keydown', handleKeyDown);
 	}, [assignModalOpen, transferModalOpen, deleteConfirmId, modalMode]);
 
+	// Estado para nomes dos titulares originais (buscados via server action)
+	const [titularNames, setTitularNames] = useState<Record<string, string>>({});
+
+	// Buscar nomes dos titulares originais para convites cujo titular não está na lista de disponíveis
+	useEffect(() => {
+		if (!assignModalOpen || availableParticipants.length === 0) return;
+
+		const groups = new Map<string, InvitationGroup>();
+		for (const p of availableParticipants) {
+			if (!groups.has(p.invitationId)) {
+				groups.set(p.invitationId, { invitationId: p.invitationId, titular: null, companions: [] });
+			}
+			const group = groups.get(p.invitationId)!;
+			if (p.participantType === 'titular') {
+				group.titular = p;
+			} else {
+				group.companions.push(p);
+			}
+		}
+
+		// Identificar convites sem titular na lista de disponíveis
+		const missingTitularInvitationIds = Array.from(groups.values())
+			.filter(g => !g.titular)
+			.map(g => g.invitationId);
+
+		if (missingTitularInvitationIds.length === 0) return;
+
+		// Buscar nomes dos titulares originais via server action dedicada
+		(async () => {
+			try {
+				const result = await getInvitationTitularNamesAction({ invitationIds: missingTitularInvitationIds });
+				if (result.success && result.data) {
+					setTitularNames(prev => ({ ...prev, ...result.data }));
+				}
+			} catch {
+				// Silencioso — fallback seguro: grupo será exibido como "Convite"
+			}
+		})();
+	}, [assignModalOpen, availableParticipants]);
+
 	// Group participants by invitationId
 	const invitationGroups: InvitationGroup[] = (() => {
 		const groups = new Map<string, InvitationGroup>();
@@ -241,8 +282,10 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 		}
 
 		return Array.from(groups.values()).sort((a, b) => {
-			const nameA = a.titular?.participantName || a.companions[0]?.participantName || '';
-			const nameB = b.titular?.participantName || b.companions[0]?.participantName || '';
+			// Priorizar nome do titular disponível; se não, usar nome original buscado via server action;
+			// NUNCA usar companion como fallback para o nome do cabeçalho do grupo
+			const nameA = a.titular?.participantName || titularNames[a.invitationId] || 'Convite';
+			const nameB = b.titular?.participantName || titularNames[b.invitationId] || 'Convite';
 			return nameA.localeCompare(nameB);
 		});
 	})();

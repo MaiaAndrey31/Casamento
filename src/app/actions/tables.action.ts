@@ -503,6 +503,75 @@ export async function assignGroupAction(
 }
 
 /**
+ * Busca os nomes dos titulares originais para uma lista de invitationIds.
+ * Usa invitations.guestIds[0] → guests.fullName para identificar o titular real,
+ * independente de quem esteja na lista de participantes disponíveis.
+ *
+ * Retorna um mapa { invitationId: titularName } para convites encontrados.
+ */
+export async function getInvitationTitularNamesAction(
+	formData: Record<string, unknown>,
+): Promise<ApiResponse<Record<string, string>>> {
+	try {
+ await requireAdminSession();
+	} catch {
+ return { success: false, error: 'Sessão administrativa inválida ou expirada.' };
+	}
+
+	const eventId = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
+	const invitationIds = Array.isArray(formData.invitationIds) ? formData.invitationIds as string[] : [];
+
+	if (invitationIds.length === 0) {
+ return { success: true, data: {} };
+	}
+
+	try {
+ const { adminDb } = await import('@/lib/firebase/admin');
+
+ const namesMap: Record<string, string> = {};
+
+ for (const invId of invitationIds) {
+ try {
+ const invDoc = await adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('invitations')
+ .doc(invId)
+ .get();
+
+ if (!invDoc.exists) continue;
+
+ const invData = invDoc.data();
+ const guestIds: string[] = Array.isArray(invData?.guestIds) ? invData.guestIds : [];
+
+ if (guestIds.length === 0) continue;
+
+ // O primeiro guestId é o titular original do convite
+ const primaryGuestId = guestIds[0];
+ const guestDoc = await adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('guests')
+ .doc(primaryGuestId)
+ .get();
+
+ if (guestDoc.exists) {
+ namesMap[invId] = guestDoc.data()?.fullName || 'Convidado';
+ }
+ } catch {
+ // Ignorar falhas individuais — continuar com os demais
+ }
+ }
+
+ return { success: true, data: namesMap };
+	} catch (e) {
+ const message = e instanceof Error ? e.message : 'Erro desconhecido';
+ console.error('[TablesAction] Falha ao buscar nomes de titulares:', message);
+ return { success: false, error: `Falha ao buscar nomes: ${message}` };
+	}
+}
+
+/**
  * Recarrega dados completos de mesas e stats do dashboard.
  * Server Action wrapper para uso em Client Components após mutações.
  */
