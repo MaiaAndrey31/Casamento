@@ -601,9 +601,20 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 
 		const occupiedSeats = assignmentsCountSnap.data().count ?? 0;
 
-		// Convidados sem mesa: guests ativos confirmados + companions confirmados - atribuições
-		// Simplificação: contar todos os participants disponíveis menos os já atribuídos
-		// Para precisão, contamos guests ativos com RSVP confirmado
+		// Buscar convites ativos para filtrar RSVPs de convites revogados/expirados
+		const activeInvitationsSnap = await adminDb
+			.collection('events')
+			.doc(eventId)
+			.collection('invitations')
+			.where('invitationStatus', '==', 'active')
+			.get();
+
+		const activeInvitationIds = new Set<string>();
+		activeInvitationsSnap.docs.forEach(doc => {
+			activeInvitationIds.add(doc.id);
+		});
+
+		// Convidados sem mesa: titulares ativos (via invitations.guestIds) + companions confirmados - atribuições
 		const confirmedRsvpsSnap = await adminDb
 			.collection('events')
 			.doc(eventId)
@@ -611,13 +622,48 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 			.where('attendanceStatus', '==', 'confirmed')
 			.get();
 
+		// Contar participantes elegíveis usando invitations.guestIds como fonte canônica
+		// de titulares (confirmedGuestIds do RSVP está sempre vazio).
+		// Filtrar convites revogados e guests inativos para consistência com listAvailableParticipants.
 		let totalConfirmedParticipants = 0;
-		confirmedRsvpsSnap.docs.forEach(doc => {
-			const data = doc.data();
-			const confirmedGuestIds = Array.isArray(data?.confirmedGuestIds) ? data.confirmedGuestIds.length : 0;
-			const companions = Array.isArray(data?.companions) ? data.companions.length : 0;
-			totalConfirmedParticipants += confirmedGuestIds + companions;
-		});
+
+		for (const rsvpDoc of confirmedRsvpsSnap.docs) {
+			const invitationId = rsvpDoc.id;
+
+			// Ignorar RSVPs de convites revogados/expirados
+			if (!activeInvitationIds.has(invitationId)) continue;
+
+			// Buscar guests do convite via invitations.guestIds (fonte canônica de titulares)
+			const invDoc = await adminDb
+				.collection('events')
+				.doc(eventId)
+				.collection('invitations')
+				.doc(invitationId)
+				.get();
+
+			const invData = invDoc.exists ? invDoc.data() : null;
+			const guestIds: string[] = Array.isArray(invData?.guestIds) ? invData.guestIds : [];
+
+			// Contar apenas guests ativos
+			let activeTitularCount = 0;
+			for (const guestId of guestIds) {
+				const guestDoc = await adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection('guests')
+					.doc(guestId)
+					.get();
+				if (guestDoc.exists && guestDoc.data()?.active !== false) {
+					activeTitularCount++;
+				}
+			}
+
+			// Contar companions confirmados
+			const rsvpData = rsvpDoc.data();
+			const companions = Array.isArray(rsvpData?.companions) ? rsvpData.companions.length : 0;
+
+			totalConfirmedParticipants += activeTitularCount + companions;
+		}
 
 		const guestsWithoutTable = Math.max(0, totalConfirmedParticipants - occupiedSeats);
 
