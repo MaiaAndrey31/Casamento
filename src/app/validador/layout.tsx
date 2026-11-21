@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ShieldCheck, LogOut, QrCode, Users, GraduationCap } from 'lucide-react';
+import { ShieldCheck, QrCode, Users, GraduationCap } from 'lucide-react';
+import { ValidatorLogoutButton } from '@/components/validador/ValidatorLogoutButton';
 
 export const metadata: Metadata = {
 	title: 'Painel do Validador — Casamento Andrey & Amanda',
@@ -38,15 +39,7 @@ export default function ValidatorLayout({
 						</div>
 					</div>
 
-					<form action="/api/validator/session" method="DELETE">
-						<button
-							type="submit"
-							className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-						>
-							<LogOut size={14} />
-							Sair
-						</button>
-					</form>
+					<ValidatorLogoutButton />
 				</div>
 			</header>
 

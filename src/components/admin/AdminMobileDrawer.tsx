@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { X, LogOut, type LucideIcon } from 'lucide-react';
+import { X, type LucideIcon } from 'lucide-react';
+import { AdminLogoutButton } from './AdminLogoutButton';
 
 export interface AdminNavItem {
 	href: string;
@@ -185,15 +186,7 @@ export function AdminMobileDrawer({ items, isOpen, onClose }: AdminMobileDrawerP
 
 				{/* Footer — Logout */}
 				<div className="border-t border-outline-variant/10 p-3 pb-safe">
-					<form action="/api/admin/session" method="DELETE">
-						<button
-							type="submit"
-							className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-body-md text-on-surface-variant transition-colors hover:bg-error-container/20 hover:text-error"
-						>
-							<LogOut size={20} />
-							Sair
-						</button>
-					</form>
+					<AdminLogoutButton />
 				</div>
 			</div>
 		</div>
