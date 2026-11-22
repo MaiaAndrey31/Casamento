@@ -10,7 +10,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAdminSession } from '@/lib/auth/admin-session';
-import type { ApiResponse } from '@/types';
+import type { ApiResponse, SpecialParticipantCategory } from '@/types';
 import { z } from 'zod';
 
 // ============================================================================
@@ -36,8 +36,8 @@ const assignParticipantSchema = z.object({
 	tableId: z.string().min(1),
 	participantId: z.string().min(1),
 	participantName: z.string().min(1),
-	participantType: z.enum(['titular', 'companion']),
-	invitationId: z.string().min(1),
+	participantType: z.enum(['titular', 'companion', 'special']),
+	invitationId: z.string().optional(),
 });
 
 const unassignParticipantSchema = z.object({
@@ -326,8 +326,10 @@ const assignGroupSchema = z.object({
 	participants: z.array(z.object({
  participantId: z.string().min(1),
  participantName: z.string().min(1),
- participantType: z.enum(['titular', 'companion']),
- invitationId: z.string().min(1),
+ participantType: z.enum(['titular', 'companion', 'special']),
+ invitationId: z.string().optional(),
+ participantSource: z.enum(['rsvp', 'special']).optional(),
+ specialCategory: z.enum(['groom', 'bride', 'child', 'family', 'other']).optional(),
 	})).min(1, 'Selecione pelo menos um participante.'),
 });
 
@@ -408,8 +410,8 @@ export async function assignGroupAction(
  throw new Error(`DUPLICATE:${participant.participantName}`);
  }
 
- // Se titular, verificar se está ativo
- if (participant.participantType === 'titular') {
+ // Se titular RSVP, verificar se está ativo; pular para participantes especiais
+ if (participant.participantType === 'titular' && participant.participantSource !== 'special') {
  const guestRef = adminDb
  .collection('events')
  .doc(eventId)
@@ -419,6 +421,20 @@ export async function assignGroupAction(
  const guestDoc = await transaction.get(guestRef);
  if (guestDoc.exists && guestDoc.data()?.active === false) {
  throw new Error(`GUEST_INACTIVE:${participant.participantName}`);
+ }
+ }
+
+ // Se participante especial, verificar se está ativo
+ if (participant.participantSource === 'special') {
+ const specialRef = adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('specialParticipants')
+ .doc(participant.participantId);
+
+ const specialDoc = await transaction.get(specialRef);
+ if (!specialDoc.exists || specialDoc.data()?.active === false) {
+ throw new Error(`SPECIAL_INACTIVE:${participant.participantName}`);
  }
  }
  }
@@ -431,16 +447,26 @@ export async function assignGroupAction(
  .collection('tableAssignments')
  .doc();
 
- transaction.set(assignmentRef, {
+ const assignmentData: Record<string, unknown> = {
  eventId,
  tableId: validation.data.tableId,
- invitationId: participant.invitationId,
  participantId: participant.participantId,
  participantName: participant.participantName,
  participantType: participant.participantType,
  assignedAt: FieldValue.serverTimestamp(),
  assignedBy: session.uid,
- });
+ };
+
+ // Campos condicionais por origem
+ if (participant.participantSource === 'special') {
+ assignmentData.participantSource = 'special';
+ assignmentData.specialCategory = participant.specialCategory || 'other';
+ } else {
+ assignmentData.participantSource = 'rsvp';
+ assignmentData.invitationId = participant.invitationId || '';
+ }
+
+ transaction.set(assignmentRef, assignmentData);
  }
 
  assignedCount = requestedCount;
@@ -607,7 +633,7 @@ export async function refreshTablesDataAction(): Promise<ApiResponse<{
  */
 export async function listAvailableParticipantsAction(
 	formData: Record<string, unknown>,
-): Promise<ApiResponse<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string }>>> {
+): Promise<ApiResponse<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus?: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory }>>> {
 	try {
  await requireAdminSession();
 	} catch {

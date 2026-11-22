@@ -284,4 +284,248 @@ describe('Organização de Mesas — Regras de Negócio', () => {
 			expect(clientCode).toContain('transferParticipantAction');
 		});
 	});
+
+
+// ============================================================================
+// PARTICIPANTES ESPECIAIS — Exclusão Definitiva e Integridade Transacional
+// ============================================================================
+
+describe('Participantes Especiais — Exclusão Definitiva e Concorrência', () => {
+	const SPECIAL_REPO_PATH = path.join(REPOS_DIR, 'special-participants.repository.ts');
+	const SPECIAL_ACTION_PATH = path.join(ACTIONS_DIR, 'special-participants.action.ts');
+	const TABLES_REPO_PATH = path.join(REPOS_DIR, 'tables.repository.ts');
+	const TABLES_ACTION_PATH = path.join(ACTIONS_DIR, 'tables.action.ts');
+	const CLIENT_PATH = path.join(process.cwd(), 'src/app/admin/mesas/TablesManagerClient.tsx');
+	const TYPES_PATH = path.join(process.cwd(), 'src/types/index.ts');
+
+	function readSpecialRepo(): string {
+		return fs.readFileSync(SPECIAL_REPO_PATH, 'utf-8');
+	}
+	function readSpecialAction(): string {
+		return fs.readFileSync(SPECIAL_ACTION_PATH, 'utf-8');
+	}
+	function readTablesRepo(): string {
+		return fs.readFileSync(TABLES_REPO_PATH, 'utf-8');
+	}
+	function readTablesAction(): string {
+		return fs.readFileSync(TABLES_ACTION_PATH, 'utf-8');
+	}
+	function readClient(): string {
+		return fs.readFileSync(CLIENT_PATH, 'utf-8');
+	}
+	function readTypes(): string {
+		return fs.readFileSync(TYPES_PATH, 'utf-8');
+	}
+
+	describe('Cenário SP-1: Exclusão definitiva transacional', () => {
+		it('deleteSpecialParticipant deve usar runTransaction para atomicidade', () => {
+			const code = readSpecialRepo();
+			expect(code).toMatch(/deleteSpecialParticipant[\s\S]*?runTransaction/);
+		});
+
+		it('deve ler o participante DENTRO da transação para detectar exclusão concorrente', () => {
+			const code = readSpecialRepo();
+			expect(code).toMatch(/transaction\.get\(participantRef\)/);
+		});
+
+		it('deve buscar atribuições DENTRO da transação', () => {
+			const code = readSpecialRepo();
+			expect(code).toMatch(/transaction\.get\([\s\S]*?assignmentsCollection\.where/);
+		});
+
+		it('deve excluir todas as atribuições ANTES de excluir o participante', () => {
+			const code = readSpecialRepo();
+			const deleteAssignmentsIdx = code.indexOf('transaction.delete(doc.ref)');
+			const deleteParticipantIdx = code.indexOf('transaction.delete(participantRef)');
+			expect(deleteAssignmentsIdx).toBeGreaterThan(0);
+			expect(deleteParticipantIdx).toBeGreaterThan(deleteAssignmentsIdx);
+		});
+
+		it('deve retornar lista de atribuições excluídas com nome da mesa para auditoria', () => {
+			const code = readSpecialRepo();
+			expect(code).toContain('deletedAssignments');
+			expect(code).toContain('assignmentId');
+			expect(code).toContain('tableId');
+			expect(code).toContain('tableName');
+		});
+
+		it('não deve mais impedir exclusão quando participante tem atribuição', () => {
+			const code = readSpecialRepo();
+			expect(code).not.toContain('Remova a atribuição primeiro');
+		});
+	});
+
+	describe('Cenário SP-2: Concorrência entre exclusão e atribuição', () => {
+		it('assignParticipant deve verificar existência do participante especial dentro da transação', () => {
+			const code = readTablesRepo();
+			expect(code).toMatch(/transaction\.get\(specialRef\)/);
+			expect(code).toContain('SPECIAL_INACTIVE');
+		});
+
+		it('assignParticipant deve verificar duplicidade dentro da transação', () => {
+			const code = readTablesRepo();
+			expect(code).toContain('ALREADY_ASSIGNED');
+			expect(code).toMatch(/assignParticipant[\s\S]*?runTransaction[\s\S]*?ALREADY_ASSIGNED/);
+		});
+
+		it('assignGroupAction deve validar participantSource special na transação', () => {
+			const code = readTablesAction();
+			expect(code).toContain("participantSource === 'special'");
+			expect(code).toContain('SPECIAL_INACTIVE');
+		});
+
+		it('schemas devem aceitar participantType special e invitationId opcional', () => {
+			const code = readTablesAction();
+			expect(code).toContain("'titular', 'companion', 'special'");
+			expect(code).toMatch(/assignParticipantSchema[\s\S]*?invitationId.*optional/);
+		});
+	});
+
+	describe('Cenário SP-3: Transferência preserva origem especial', () => {
+		it('transferParticipant deve preservar participantSource e specialCategory', () => {
+			const code = readTablesRepo();
+			expect(code).toMatch(/currentData\.participantSource === 'special'/);
+			expect(code).toContain("transferData.participantSource = 'special'");
+			expect(code).toContain('transferData.specialCategory');
+		});
+	});
+
+	describe('Cenário SP-4: Modal de confirmação de exclusão', () => {
+		it('interface deve ter modal de confirmação com aviso de irreversibilidade', () => {
+			const code = readClient();
+			expect(code).toContain('deleteConfirmOpen');
+			expect(code).toContain('Excluir Permanentemente');
+			expect(code).toContain('não pode ser desfeita');
+		});
+
+		it('modal deve exibir nome, categoria e informação sobre mesa atribuída', () => {
+			const code = readClient();
+			expect(code).toContain('deletingParticipant.fullName');
+			expect(code).toContain('CATEGORY_LABELS[deletingParticipant.category]');
+			expect(code).toContain('hasAssignment');
+			expect(code).toContain('tableName');
+		});
+
+		it('handleDeleteSpecial deve buscar dados antes de abrir o modal (não excluir diretamente)', () => {
+			const code = readClient();
+			expect(code).toContain('getSpecialParticipantForDeletionAction');
+			expect(code).toContain('setDeleteConfirmOpen(true)');
+		});
+
+		it('confirmDeleteSpecial deve chamar deleteSpecialParticipantAction após confirmação', () => {
+			const code = readClient();
+			expect(code).toMatch(/confirmDeleteSpecial[\s\S]*?deleteSpecialParticipantAction/);
+		});
+	});
+
+	describe('Cenário SP-5: Server action de exclusão com audit log enriquecido', () => {
+		it('deleteSpecialParticipantAction deve registrar deletedAssignmentsCount no audit log', () => {
+			const code = readSpecialAction();
+			expect(code).toContain('deletedAssignmentsCount');
+			expect(code).toContain("action: 'specialParticipant.deleted'");
+		});
+
+		it('getSpecialParticipantForDeletionAction deve verificar atribuição de mesa', () => {
+			const code = readSpecialAction();
+			expect(code).toContain('getSpecialParticipantForDeletionAction');
+			expect(code).toContain('hasAssignment');
+			expect(code).toContain('tableName');
+		});
+
+		it('todas as actions de especiais devem exigir requireAdminSession', () => {
+			const code = readSpecialAction();
+			const actionFunctions = [
+				'listSpecialParticipantsAction',
+				'createSpecialParticipantAction',
+				'updateSpecialParticipantAction',
+				'deleteSpecialParticipantAction',
+				'getSpecialParticipantForDeletionAction',
+			];
+			for (const fn of actionFunctions) {
+				expect(code).toContain(`export async function ${fn}`);
+			}
+			const matches = code.match(/requireAdminSession/g);
+			expect(matches).not.toBeNull();
+			expect(matches!.length).toBeGreaterThanOrEqual(5);
+		});
+	});
+
+	describe('Cenário SP-6: Tipos e modelo de dados', () => {
+		it('deve definir SpecialParticipant e SpecialParticipantCategory', () => {
+			const code = readTypes();
+			expect(code).toContain('export interface SpecialParticipant');
+			expect(code).toContain('export type SpecialParticipantCategory');
+			expect(code).toContain("'groom' | 'bride' | 'child' | 'family' | 'other'");
+		});
+
+		it('TableAssignment deve suportar participantSource e specialCategory', () => {
+			const code = readTypes();
+			expect(code).toContain('export type ParticipantSource');
+			expect(code).toContain("'rsvp' | 'special'");
+			const assignmentSection = code.substring(
+				code.indexOf('export interface TableAssignment'),
+				code.indexOf('}', code.indexOf('export interface TableAssignment')) + 1,
+			);
+			expect(assignmentSection).toContain('participantSource');
+			expect(assignmentSection).toContain('specialCategory');
+			expect(assignmentSection).toContain("'titular' | 'companion' | 'special'");
+		});
+
+		it('invitationId deve ser opcional em TableAssignment', () => {
+			const code = readTypes();
+			const assignmentSection = code.substring(
+				code.indexOf('export interface TableAssignment'),
+				code.indexOf('}', code.indexOf('export interface TableAssignment')) + 1,
+			);
+			expect(assignmentSection).toMatch(/invitationId\?.*string/);
+		});
+	});
+
+	describe('Cenário SP-7: Firestore Rules — proteção de specialParticipants', () => {
+		it('regras devem proteger specialParticipants contra acesso público', () => {
+			const rules = fs.readFileSync(RULES_PATH, 'utf-8');
+			const hasSpecificRule = rules.includes('match /specialParticipants/{participantId}');
+			const hasCatchAllBlock = rules.includes("match /{document=**}") && rules.includes('allow read, write: if false');
+			if (!hasSpecificRule) {
+				expect(hasCatchAllBlock).toBe(true);
+			}
+		});
+
+		it('operações de especiais usam Admin SDK (server-side), não SDK cliente', () => {
+			const repoCode = readSpecialRepo();
+			expect(repoCode).toContain("await import('@/lib/firebase/admin')");
+			expect(repoCode).not.toMatch(/import.*from\s+['"]firebase\/firestore['"]/);
+		});
+	});
+
+	describe('Cenário SP-8: Contadores incluem participantes especiais', () => {
+		it('getTablesDashboardStats deve somar especiais ativos ao total elegível', () => {
+			const code = readTablesRepo();
+			expect(code).toContain("collection('specialParticipants')");
+			expect(code).toContain('activeSpecialCount');
+			expect(code).toContain('totalEligibleParticipants');
+		});
+
+		it('listAvailableParticipants deve unir RSVP e especiais', () => {
+			const code = readTablesRepo();
+			expect(code).toContain('listAvailableSpecialParticipants');
+			expect(code).toContain('combined');
+		});
+	});
+
+	describe('Cenário SP-9: Interface diferencia origens visualmente', () => {
+		it('modal de atribuição deve renderizar seção separada para especiais', () => {
+			const code = readClient();
+			expect(code).toContain('Participantes Especiais');
+			expect(code).toContain('filteredSpecialParticipants');
+			expect(code).toContain('CATEGORY_ICONS');
+		});
+
+		it('preview de atribuição deve exibir categoria para especiais', () => {
+			const code = readClient();
+			expect(code).toMatch(/participantSource === 'special'[\s\S]*?CATEGORY_LABELS/);
+		});
+	});
+});
+
 });

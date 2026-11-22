@@ -237,6 +237,24 @@ export interface CompanionWithId {
 }
 
 // ============================================================================
+// PARTICIPANTES ESPECIAIS (Noivos, Filhos, Familiares)
+// ============================================================================
+
+export type SpecialParticipantCategory = 'groom' | 'bride' | 'child' | 'family' | 'other';
+
+export interface SpecialParticipant {
+  id: string;
+  eventId: string;
+  fullName: string;
+  normalizedName: string; // lowercase, sem acentos, para busca
+  category: SpecialParticipantCategory;
+  active: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================================
 // ORGANIZAÇÃO DE MESAS
 // ============================================================================
 
@@ -250,14 +268,18 @@ export interface Table {
   createdBy: string; // UID do admin que criou
 }
 
+export type ParticipantSource = 'rsvp' | 'special';
+
 export interface TableAssignment {
   id: string;
   eventId: string;
   tableId: string;
-  invitationId: string;
-  participantId: string; // guestId (titular) ou UUID (acompanhante)
+  invitationId?: string; // Opcional — ausente quando source === 'special'
+  participantId: string; // guestId (titular), UUID (acompanhante) ou specialParticipantId
   participantName: string; // Denormalizado para performance em listas
-  participantType: 'titular' | 'companion';
+  participantType: 'titular' | 'companion' | 'special';
+  participantSource?: ParticipantSource; // 'rsvp' (padrão retrocompatível) ou 'special'
+  specialCategory?: SpecialParticipantCategory; // Presente apenas quando source === 'special'
   assignedAt: string;
   assignedBy: string; // UID do admin que atribuiu
 }

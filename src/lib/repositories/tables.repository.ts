@@ -8,7 +8,7 @@
  * Timestamps antes de retornar dados para Server/Client Components.
  */
 
-import type { Table, TableAssignment, TableWithOccupancy, TablesDashboardStats } from '@/types';
+import type { SpecialParticipantCategory, Table, TableAssignment, TableWithOccupancy, TablesDashboardStats } from '@/types';
 import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
 
 const TABLES_SUBCOLLECTION = 'tables';
@@ -317,8 +317,8 @@ export async function assignParticipant(
 		tableId: string;
 		participantId: string;
 		participantName: string;
-		participantType: 'titular' | 'companion';
-		invitationId: string;
+		participantType: 'titular' | 'companion' | 'special';
+		invitationId?: string;
 	},
 	adminUid: string,
 ): Promise<{ success: boolean; assignmentId?: string; error?: string }> {
@@ -372,8 +372,9 @@ export async function assignParticipant(
 				throw new Error(`ALREADY_ASSIGNED:${existingTableId}`);
 			}
 
-			// 3. Se for titular, verificar se o guest está ativo
-			if (data.participantType === 'titular') {
+			// 3. Se for titular RSVP, verificar se o guest está ativo; pular para especiais
+			const isSpecial = (data as Record<string, unknown>).participantSource === 'special';
+			if (data.participantType === 'titular' && !isSpecial) {
 				const guestRef = adminDb
 					.collection('events')
 					.doc(eventId)
@@ -386,6 +387,20 @@ export async function assignParticipant(
 				}
 			}
 
+			// Se participante especial, verificar se está ativo
+			if (isSpecial) {
+				const specialRef = adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection('specialParticipants')
+					.doc(data.participantId);
+
+				const specialDoc = await transaction.get(specialRef);
+				if (!specialDoc.exists || specialDoc.data()?.active === false) {
+					throw new Error('SPECIAL_INACTIVE');
+				}
+			}
+
 			// 4. Criar atribuição
 			const assignmentRef = adminDb
 				.collection('events')
@@ -393,16 +408,25 @@ export async function assignParticipant(
 				.collection(ASSIGNMENTS_SUBCOLLECTION)
 				.doc();
 
-			transaction.set(assignmentRef, {
+			const assignmentData: Record<string, unknown> = {
 				eventId,
 				tableId: data.tableId,
-				invitationId: data.invitationId,
 				participantId: data.participantId,
 				participantName: data.participantName,
 				participantType: data.participantType,
 				assignedAt: FieldValue.serverTimestamp(),
 				assignedBy: adminUid,
-			});
+			};
+
+			if (isSpecial) {
+				assignmentData.participantSource = 'special';
+				assignmentData.specialCategory = (data as Record<string, unknown>).specialCategory || 'other';
+			} else {
+				assignmentData.participantSource = 'rsvp';
+				assignmentData.invitationId = data.invitationId || '';
+			}
+
+			transaction.set(assignmentRef, assignmentData);
 
 			assignmentId = assignmentRef.id;
 		});
@@ -534,16 +558,26 @@ export async function transferParticipant(
 				.collection(ASSIGNMENTS_SUBCOLLECTION)
 				.doc();
 
-			transaction.set(newAssignmentRef, {
+			const transferData: Record<string, unknown> = {
 				eventId,
 				tableId: data.targetTableId,
-				invitationId: currentData.invitationId,
 				participantId: data.participantId,
 				participantName: currentData.participantName,
 				participantType: currentData.participantType,
 				assignedAt: FieldValue.serverTimestamp(),
 				assignedBy: adminUid,
-			});
+			};
+
+			// Preservar origem e categoria do participante especial
+			if (currentData.participantSource === 'special') {
+				transferData.participantSource = 'special';
+				transferData.specialCategory = currentData.specialCategory || 'other';
+			} else {
+				transferData.participantSource = 'rsvp';
+				transferData.invitationId = currentData.invitationId || '';
+			}
+
+			transaction.set(newAssignmentRef, transferData);
 		});
 
 		return { success: true };
@@ -665,7 +699,19 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 			totalConfirmedParticipants += activeTitularCount + companions;
 		}
 
-		const guestsWithoutTable = Math.max(0, totalConfirmedParticipants - occupiedSeats);
+		// Contar participantes especiais ativos
+		const specialParticipantsSnap = await adminDb
+			.collection('events')
+			.doc(eventId)
+			.collection('specialParticipants')
+			.where('active', '==', true)
+			.count()
+			.get();
+
+		const activeSpecialCount = specialParticipantsSnap.data().count ?? 0;
+
+		const totalEligibleParticipants = totalConfirmedParticipants + activeSpecialCount;
+		const guestsWithoutTable = Math.max(0, totalEligibleParticipants - occupiedSeats);
 
 		return {
 			totalTables,
@@ -792,7 +838,7 @@ function normalizeSearch(value: string): string {
 export async function listAvailableParticipants(
 	eventId: string,
 	searchTerm?: string,
-): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean }>> {
+): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory }>> {
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
 		const { FieldValue } = await import('firebase-admin/firestore');
@@ -921,7 +967,26 @@ export async function listAvailableParticipants(
 			}
 		}
 
-		return available.sort((a, b) => normalizeSearch(a.participantName).localeCompare(normalizeSearch(b.participantName)));
+		// Integrar participantes especiais ativos na lista de disponíveis
+		const { listAvailableSpecialParticipants } = await import('@/lib/repositories/special-participants.repository');
+		const specialParticipants = await listAvailableSpecialParticipants(eventId, searchTerm);
+
+		// Unir listas: RSVP confirmados + participantes especiais
+		const combined = [
+			...available,
+			...specialParticipants.map(sp => ({
+				participantId: sp.participantId,
+				participantName: sp.participantName,
+				participantType: sp.participantType as 'titular' | 'companion' | 'special',
+				invitationId: sp.invitationId,
+				rsvpStatus: sp.rsvpStatus,
+				alreadyAssigned: sp.alreadyAssigned,
+				participantSource: sp.participantSource,
+				specialCategory: sp.specialCategory,
+			})),
+		];
+
+		return combined.sort((a, b) => normalizeSearch(a.participantName).localeCompare(normalizeSearch(b.participantName)));
 	} catch (e) {
 		console.error('[TablesRepository] Falha ao listar participantes disponíveis:', e);
 		return [];
