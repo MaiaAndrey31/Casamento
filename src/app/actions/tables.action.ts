@@ -633,7 +633,7 @@ export async function refreshTablesDataAction(): Promise<ApiResponse<{
  */
 export async function listAvailableParticipantsAction(
 	formData: Record<string, unknown>,
-): Promise<ApiResponse<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus?: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory }>>> {
+): Promise<ApiResponse<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus?: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory; pendingReconciliation?: boolean }>>> {
 	try {
  await requireAdminSession();
 	} catch {

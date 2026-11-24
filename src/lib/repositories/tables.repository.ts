@@ -838,7 +838,7 @@ function normalizeSearch(value: string): string {
 export async function listAvailableParticipants(
 	eventId: string,
 	searchTerm?: string,
-): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory }>> {
+): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory; pendingReconciliation?: boolean }>> {
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
 		const { FieldValue } = await import('firebase-admin/firestore');
@@ -875,7 +875,7 @@ export async function listAvailableParticipants(
 			.where('attendanceStatus', '==', 'confirmed')
 			.get();
 
-		const available: Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean }> = [];
+		const available: Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean; pendingReconciliation?: boolean }> = [];
 		const normalizedSearch = searchTerm ? normalizeSearch(searchTerm) : '';
 
 		for (const rsvpDoc of confirmedRsvpsSnap.docs) {
@@ -928,22 +928,33 @@ export async function listAvailableParticipants(
 				});
 			}
 
-			// Adicionar companions — APENAS os que possuem participantId persistente.
-			// Companions sem participantId são dados legados que precisam ser
-			// reconciliados pelo script de migração (migrate-companion-ids).
-			// NÃO gerar UUIDs efêmeros aqui: isso causaria identidades diferentes
-			// entre consultas, fazendo participantes já atribuídos reaparecerem como disponíveis.
+			// Adicionar companions — distinguir entre identificados e pendentes de reconciliação.
+			// Companions COM participantId persistente: filtrar por atribuição normalmente.
+			// Companions SEM participantId: dados legados não reconciliados. NÃO gerar UUIDs
+			// efêmeros (causaria identidades diferentes entre consultas). Incluir na lista com
+			// flag pendingReconciliation=true para visibilidade administrativa, mas impedir
+			// atribuição até que a migração reconcile o identificador.
 			const rawCompanions: Array<{ participantId?: string; name?: string; isMinor?: boolean; age?: number }> =
 				Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
 
 			for (const companion of rawCompanions) {
-				// Pular companions sem identidade persistente — pendência de migração
-				if (!companion.participantId) continue;
-
-				if (assignedParticipantIds.has(companion.participantId)) continue;
-
 				const companionName = companion.name || 'Acompanhante';
 				if (normalizedSearch && !normalizeSearch(companionName).includes(normalizedSearch)) continue;
+
+				if (!companion.participantId) {
+					// Companion legado sem identidade persistente — pendente de reconciliação
+					available.push({
+						participantId: '',
+						participantName: companionName,
+						participantType: 'companion',
+						invitationId,
+						rsvpStatus: 'confirmed',
+						pendingReconciliation: true,
+					});
+					continue;
+				}
+
+				if (assignedParticipantIds.has(companion.participantId)) continue;
 
 				available.push({
 					participantId: companion.participantId,

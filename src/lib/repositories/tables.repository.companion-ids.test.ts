@@ -121,7 +121,7 @@ describe('listAvailableParticipants — Identidade Persistente', () => {
 		vi.clearAllMocks();
 	});
 
-	it('deve ignorar companions sem participantId persistente (dados legados)', async () => {
+	it('deve incluir companions sem participantId como pendentes de reconciliação (não ignorar)', async () => {
 		setupFirestoreMock({
 			assignments: [],
 			invitations: [{ id: 'inv-001', data: { invitationStatus: 'active', guestIds: ['guest-titular'] } }],
@@ -141,11 +141,16 @@ describe('listAvailableParticipants — Identidade Persistente', () => {
 		const { listAvailableParticipants } = await import('./tables.repository');
 		const result = await listAvailableParticipants('test-event');
 
-		// Apenas o titular e o companion COM ID devem aparecer
-		expect(result).toHaveLength(2);
+		// Titular + companion COM ID + companion SEM ID (pendente) devem aparecer
+		expect(result).toHaveLength(3);
 		expect(result.find(p => p.participantName === 'Titular Teste')).toBeTruthy();
 		expect(result.find(p => p.participantName === 'Companheiro Com ID')).toBeTruthy();
-		expect(result.find(p => p.participantName === 'Companheiro Sem ID')).toBeUndefined();
+
+		// Companion sem ID deve aparecer com pendingReconciliation=true e participantId vazio
+		const pending = result.find(p => p.participantName === 'Companheiro Sem ID');
+		expect(pending).toBeTruthy();
+		expect(pending?.pendingReconciliation).toBe(true);
+		expect(pending?.participantId).toBe('');
 	});
 
 	it('deve filtrar companions já atribuídos usando participantId persistente', async () => {

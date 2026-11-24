@@ -14,6 +14,7 @@ import {
 	X,
 	Loader2,
 	AlertCircle,
+	AlertTriangle,
 	ChevronDown,
 	ChevronUp,
 	Heart,
@@ -66,6 +67,7 @@ interface AvailableParticipant {
 	invitationId: string;
 	participantSource?: 'rsvp' | 'special';
 	specialCategory?: SpecialParticipantCategory;
+	pendingReconciliation?: boolean;
 }
 
 interface SpecialParticipantItem {
@@ -465,11 +467,16 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	const specialParticipantsList = availableParticipants.filter(p => p.participantSource === 'special');
 	const rsvpParticipantsList = availableParticipants.filter(p => p.participantSource !== 'special');
 
-	// Group RSVP participants by invitationId
+	// Separar participantes pendentes de reconciliação (sem participantId persistente)
+	// Estes aparecem em seção administrativa separada e NÃO são selecionáveis para atribuição
+	const pendingReconciliationList = rsvpParticipantsList.filter(p => p.pendingReconciliation);
+	const availableRsvpList = rsvpParticipantsList.filter(p => !p.pendingReconciliation);
+
+	// Group RSVP participants by invitationId (apenas os disponíveis com ID persistente)
 	const invitationGroups: InvitationGroup[] = (() => {
 		const groups = new Map<string, InvitationGroup>();
 
-		for (const p of rsvpParticipantsList) {
+		for (const p of availableRsvpList) {
 			if (!groups.has(p.invitationId)) {
 				groups.set(p.invitationId, { invitationId: p.invitationId, titular: null, companions: [] });
 			}
@@ -1038,10 +1045,40 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 													</div>
 												)}
 
+												{/* Seção: Identificação Pendente (acompanhantes sem participantId persistente) */}
+												{pendingReconciliationList.length > 0 && (
+													<div className="mb-4">
+														<div className="mb-2 flex items-center gap-2 px-1">
+															<AlertTriangle size={14} className="text-amber-600" />
+															<span className="text-label-sm font-bold uppercase tracking-wider text-amber-700">
+																Identificação Pendente ({pendingReconciliationList.length})
+															</span>
+														</div>
+														<div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+															<p className="mb-2 text-body-xs text-amber-800">
+																Estes participantes confirmados não possuem identificador persistente e não podem ser atribuídos até que a reconciliação seja executada.
+															</p>
+															<div className="space-y-1">
+																{pendingReconciliationList.map((p, idx) => (
+																	<div key={`${p.invitationId}-pending-${idx}`} className="flex items-center gap-2 rounded px-2 py-1 opacity-70">
+																		<div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-amber-300 bg-amber-100">
+																			<AlertTriangle size={8} className="text-amber-600" />
+																		</div>
+																		<span className="text-body-sm text-on-surface">{p.participantName}</span>
+																		<span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-700">
+																			Pendente
+																		</span>
+																	</div>
+																))}
+															</div>
+														</div>
+													</div>
+												)}
+
 												{/* Seção: Convidados Confirmados (RSVP) */}
 												{filteredGroups.length > 0 && (
 													<div>
-														{filteredSpecialParticipants.length > 0 && (
+														{(filteredSpecialParticipants.length > 0 || pendingReconciliationList.length > 0) && (
 															<div className="mb-2 flex items-center gap-2 px-1">
 																<Users size={14} className="text-on-surface-variant" />
 																<span className="text-label-sm font-bold uppercase tracking-wider text-on-surface-variant">
