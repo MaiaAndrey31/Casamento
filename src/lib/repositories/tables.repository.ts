@@ -829,9 +829,9 @@ function normalizeSearch(value: string): string {
  * Lista participantes disponíveis para atribuição (não atribuídos a nenhuma mesa).
  * Retorna guests ativos confirmados + companions de RSVPs confirmados.
  *
- * IMPORTANTE: Companions sem participantId persistente recebem um UUID gerado
- * via ensureCompanionIds() e são persistidos de volta no RSVP para garantir
- * consistência futura. Isso alinha os critérios com getTablesDashboardStats.
+ * OPERAÇÃO EXCLUSIVAMENTE DE LEITURA — nenhuma escrita no Firestore.
+ * Companions sem participantId persistente são ignorados (dados legados);
+ * devem ser reconciliados pelo script migrate-companion-ids antes de aparecerem aqui.
  *
  * Também filtra convites revogados/expirados para consistência com o dashboard.
  */
@@ -842,8 +842,6 @@ export async function listAvailableParticipants(
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
 		const { FieldValue } = await import('firebase-admin/firestore');
-		const { ensureCompanionIds } = await import('@/lib/checkin/participant-ids');
-
 		// Buscar todas as atribuições existentes
 		const allAssignmentsSnap = await adminDb
 			.collection('events')
@@ -930,28 +928,18 @@ export async function listAvailableParticipants(
 				});
 			}
 
-			// Adicionar companions — gerar participantId persistente se necessário
+			// Adicionar companions — APENAS os que possuem participantId persistente.
+			// Companions sem participantId são dados legados que precisam ser
+			// reconciliados pelo script de migração (migrate-companion-ids).
+			// NÃO gerar UUIDs efêmeros aqui: isso causaria identidades diferentes
+			// entre consultas, fazendo participantes já atribuídos reaparecerem como disponíveis.
 			const rawCompanions: Array<{ participantId?: string; name?: string; isMinor?: boolean; age?: number }> =
 				Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
 
-			// ensureCompanionIds gera UUIDs para companions sem participantId
-			const companionsWithIds = ensureCompanionIds(
-				rawCompanions.map(c => ({
-					name: c.name || 'Acompanhante',
-					isMinor: Boolean(c.isMinor),
-					age: c.age,
-					participantId: c.participantId,
-				})),
-			);
+			for (const companion of rawCompanions) {
+				// Pular companions sem identidade persistente — pendência de migração
+				if (!companion.participantId) continue;
 
-			// IMPORTANTE: listAvailableParticipants é uma operação de LEITURA.
-			// Companions sem participantId recebem UUIDs em memória apenas para
-			// permitir a atribuição. A persistência dos IDs deve ser feita por
-			// um procedimento explícito e separado (não automático na listagem).
-			// Os UUIDs gerados aqui são estáveis dentro da mesma chamada, mas
-			// NÃO são persistidos automaticamente no Firestore.
-
-			for (const companion of companionsWithIds) {
 				if (assignedParticipantIds.has(companion.participantId)) continue;
 
 				const companionName = companion.name || 'Acompanhante';
