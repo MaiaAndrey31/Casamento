@@ -323,12 +323,13 @@ export async function listAvailableSpecialParticipants(
 		}> = [];
 
 		for (const doc of specialSnap.docs) {
+			// Filtrar participantes especiais já atribuídos — apenas disponíveis aparecem
+			if (assignedParticipantIds.has(doc.id)) continue;
+
 			const data = doc.data();
 			const fullName = data?.fullName || '';
 
 			if (normalizedSearch && !normalizeSearch(fullName).includes(normalizedSearch)) continue;
-
-			const isAlreadyAssigned = assignedParticipantIds.has(doc.id);
 
 			available.push({
 				participantId: doc.id,
@@ -338,7 +339,6 @@ export async function listAvailableSpecialParticipants(
 				specialCategory: data?.category || 'other',
 				invitationId: `__special_${doc.id}`, // Placeholder único para compatibilidade
 				rsvpStatus: 'special',
-				alreadyAssigned: isAlreadyAssigned,
 			});
 		}
 

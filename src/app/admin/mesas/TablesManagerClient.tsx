@@ -64,7 +64,6 @@ interface AvailableParticipant {
 	participantName: string;
 	participantType: 'titular' | 'companion' | 'special';
 	invitationId: string;
-	alreadyAssigned?: boolean; // true se já está em outra mesa (não selecionável)
 	participantSource?: 'rsvp' | 'special';
 	specialCategory?: SpecialParticipantCategory;
 }
@@ -498,8 +497,11 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 		)
 		: specialParticipantsList;
 
+	// Filtrar grupos vazios (todos os participantes já atribuídos) e aplicar busca
+	const nonEmptyGroups = invitationGroups.filter(g => g.titular || g.companions.length > 0);
+
 	const filteredGroups = normalizedSearch
-		? invitationGroups.filter(g => {
+		? nonEmptyGroups.filter(g => {
 			const allNames = [
 				g.titular?.participantName,
 				...g.companions.map(c => c.participantName),
@@ -508,7 +510,7 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 				name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(normalizedSearch),
 			);
 		})
-		: invitationGroups;
+		: nonEmptyGroups;
 
 	const toggleParticipant = (participantId: string) => {
 		setSelectedParticipantIds(prev => {
@@ -525,10 +527,10 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	const selectEntireGroup = (group: InvitationGroup) => {
 		setSelectedParticipantIds(prev => {
 			const next = new Set(prev);
-			// Excluir titulares já atribuídos da seleção — eles não são selecionáveis
+			// Todos os participantes no grupo são disponíveis (filtrados no repositório)
 			const selectableIds = [
-				(group.titular && !group.titular.alreadyAssigned) ? group.titular.participantId : null,
-				...group.companions.filter(c => !c.alreadyAssigned).map(c => c.participantId),
+				group.titular?.participantId ?? null,
+				...group.companions.map(c => c.participantId),
 			].filter(Boolean) as string[];
 
 			// If all selectable are already selected, deselect all; otherwise select all
@@ -991,14 +993,9 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 												<Users size={32} className="mx-auto mb-3 text-on-surface-variant/30" />
 												<p className="text-body-sm font-medium text-on-surface-variant">
 													{normalizedSearch
-														? 'Nenhum participante encontrado para esta busca.'
-														: 'Nenhum participante disponível para atribuição.'}
+														? 'Nenhum participante disponível encontrado para esta busca.'
+														: 'Todos os participantes confirmados e especiais elegíveis já foram distribuídos nas mesas.'}
 												</p>
-												{!normalizedSearch && (
-													<p className="mt-1 text-body-xs text-on-surface-variant/60">
-														Todos os participantes já estão atribuídos a mesas.
-													</p>
-												)}
 											</div>
 										) : (
 											<div className="space-y-4">
@@ -1018,19 +1015,7 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 															{filteredSpecialParticipants.map(sp => {
 																const isSelected = selectedParticipantIds.has(sp.participantId);
 																const CategoryIcon = CATEGORY_ICONS[sp.specialCategory || 'other'];
-																return sp.alreadyAssigned ? (
-																	<div key={sp.participantId} className="flex items-center gap-3 rounded-lg px-3 py-2 opacity-60">
-																		<div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-outline-variant/40 bg-outline-variant/20">
-																			<Check size={10} className="text-on-surface-variant" />
-																		</div>
-																		<CategoryIcon size={14} className="shrink-0 text-amber-600" />
-																		<span className="text-body-sm text-on-surface line-through">{sp.participantName}</span>
-																		<span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-																			{CATEGORY_LABELS[sp.specialCategory || 'other']}
-																		</span>
-																		<span className="ml-auto text-[10px] font-medium text-on-surface-variant">Já em outra mesa</span>
-																	</div>
-																) : (
+																return (
 																	<label
 																		key={sp.participantId}
 																		className="flex cursor-pointer items-center gap-3 rounded-lg border border-amber-200/50 bg-amber-50/30 px-3 py-2 hover:bg-amber-50"
@@ -1098,8 +1083,7 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 																					{groupName}
 																				</p>
 																				<p className="text-body-xs text-on-surface-variant">
-																					{groupIds.length} {groupIds.length === 1 ? 'participante' : 'participantes'}
-																					{group.companions.length > 0 && ` · ${group.companions.length} acompanhante${group.companions.length > 1 ? 's' : ''}`}
+																					{groupIds.length} {groupIds.length === 1 ? 'participante disponível' : 'participantes disponíveis'}
 																				</p>
 																			</div>
 
@@ -1118,61 +1102,35 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 																		{isExpanded && (
 																			<div className="border-t border-outline-variant/10 bg-surface-container-lowest/50 px-3 pb-2 pt-1">
 																				{group.titular && (
-																					group.titular.alreadyAssigned ? (
-																						<div className="flex items-center gap-3 rounded-lg px-2 py-2 opacity-60">
-																							<div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-outline-variant/40 bg-outline-variant/20">
-																								<Check size={10} className="text-on-surface-variant" />
-																							</div>
-																							<span className="text-body-sm text-on-surface line-through">{group.titular.participantName}</span>
-																							<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
-																								Titular
-																							</span>
-																							<span className="ml-auto text-[10px] font-medium text-on-surface-variant">Já em outra mesa</span>
-																						</div>
-																					) : (
-																						<label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low">
-																							<input
-																								type="checkbox"
-																								checked={selectedParticipantIds.has(group.titular.participantId)}
-																								onChange={() => toggleParticipant(group.titular!.participantId)}
-																								className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
-																							/>
-																							<span className="text-body-sm font-medium text-on-surface">{group.titular.participantName}</span>
-																							<span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-																								Titular
-																							</span>
-																						</label>
-																					)
+																					<label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low">
+																						<input
+																							type="checkbox"
+																							checked={selectedParticipantIds.has(group.titular.participantId)}
+																							onChange={() => toggleParticipant(group.titular!.participantId)}
+																							className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
+																						/>
+																						<span className="text-body-sm font-medium text-on-surface">{group.titular.participantName}</span>
+																						<span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+																							Titular
+																						</span>
+																					</label>
 																				)}
 																				{group.companions.map(companion => (
-																					companion.alreadyAssigned ? (
-																						<div key={companion.participantId} className="flex items-center gap-3 rounded-lg px-2 py-2 opacity-60">
-																							<div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 border-outline-variant/40 bg-outline-variant/20">
-																								<Check size={10} className="text-on-surface-variant" />
-																							</div>
-																							<span className="text-body-sm text-on-surface line-through">{companion.participantName}</span>
-																							<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
-																								Acompanhante
-																							</span>
-																							<span className="ml-auto text-[10px] font-medium text-on-surface-variant">Já em outra mesa</span>
-																						</div>
-																					) : (
-																						<label
-																							key={companion.participantId}
-																							className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low"
-																						>
-																							<input
-																								type="checkbox"
-																								checked={selectedParticipantIds.has(companion.participantId)}
-																								onChange={() => toggleParticipant(companion.participantId)}
-																								className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
-																							/>
-																							<span className="text-body-sm text-on-surface">{companion.participantName}</span>
-																							<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
-																								Acompanhante
-																							</span>
-																						</label>
-																					)
+																					<label
+																						key={companion.participantId}
+																						className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-low"
+																					>
+																						<input
+																							type="checkbox"
+																							checked={selectedParticipantIds.has(companion.participantId)}
+																							onChange={() => toggleParticipant(companion.participantId)}
+																							className="h-4 w-4 rounded border-outline-variant/40 text-primary accent-primary"
+																						/>
+																						<span className="text-body-sm text-on-surface">{companion.participantName}</span>
+																						<span className="rounded-full bg-surface-container-low px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+																							Acompanhante
+																						</span>
+																					</label>
 																				))}
 																			</div>
 																		)}

@@ -902,10 +902,11 @@ export async function listAvailableParticipants(
 			const invData = invDoc.exists ? invDoc.data() : null;
 			const guestIds: string[] = Array.isArray(invData?.guestIds) ? invData.guestIds : [];
 
-			// Adicionar todos os guests do convite como titulares potenciais
-			// (incluindo já atribuídos, para manter o nome no cabeçalho do grupo)
+			// Adicionar apenas guests NÃO atribuídos como titulares disponíveis.
+			// Titulares já atribuídos são excluídos da lista de disponíveis;
+			// o nome do grupo é recuperado via getInvitationTitularNamesAction no client.
 			for (const guestId of guestIds) {
-				const isAlreadyAssigned = assignedParticipantIds.has(guestId);
+				if (assignedParticipantIds.has(guestId)) continue;
 
 				const guestDoc = await adminDb
 					.collection('events')
@@ -926,7 +927,6 @@ export async function listAvailableParticipants(
 					participantType: 'titular',
 					invitationId,
 					rsvpStatus: 'confirmed',
-					alreadyAssigned: isAlreadyAssigned,
 				});
 			}
 
