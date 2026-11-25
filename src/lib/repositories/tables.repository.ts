@@ -692,11 +692,16 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 				}
 			}
 
-			// Contar companions confirmados
+			// Contar companions confirmados — apenas os que possuem participantId persistente.
+			// Companions sem participantId são dados legados não reconciliados e não devem
+			// ser contabilizados até que a migração resolva sua identidade. Isso alinha o
+			// dashboard com listAvailableParticipants, que também ignora companions sem ID.
 			const rsvpData = rsvpDoc.data();
-			const companions = Array.isArray(rsvpData?.companions) ? rsvpData.companions.length : 0;
+			const rawCompanions: Array<{ participantId?: string }> =
+				Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
+			const companionsWithId = rawCompanions.filter(c => c.participantId).length;
 
-			totalConfirmedParticipants += activeTitularCount + companions;
+			totalConfirmedParticipants += activeTitularCount + companionsWithId;
 		}
 
 		// Contar participantes especiais ativos
