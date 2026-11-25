@@ -3,6 +3,8 @@
  *
  * Todas as operações são server-side via Admin SDK.
  * Usa transações para controle de concorrência (campo `revision`).
+ * Toda escrita de `companions` é preparada por preparePersistedCompanions(),
+ * garantindo participantId válido e preservação de identidades existentes.
  *
  * SERIALIZAÇÃO: getRSVP usa serializeFirestoreValue() para converter Timestamps
  * antes de retornar dados para Server/Client Components.
@@ -10,6 +12,7 @@
 
 import type { RSVP, AttendanceStatus, CompanionInfo } from '@/types';
 import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
+import { preparePersistedCompanions } from '@/lib/rsvp/companion-identity';
 
 const RSVPS_SUBCOLLECTION = 'rsvps';
 
@@ -41,11 +44,21 @@ export async function submitRSVP(
 
 		await adminDb.runTransaction(async (transaction) => {
 			const doc = await transaction.get(ref);
+			const currentData = doc.exists ? doc.data() : undefined;
+
+			// REGRA CENTRAL: toda escrita de companions passa pela preparação
+			// de identidades, dentro da mesma transação que lê o estado atual.
+			// Companions novos recebem UUID; existentes preservam o ID original.
+			const companions = preparePersistedCompanions({
+				incoming: data.companions,
+				existing: Array.isArray(currentData?.companions) ? currentData.companions : [],
+			});
 
 			if (doc.exists) {
-				const currentRevision = doc.data()?.revision ?? 0;
+				const currentRevision = currentData?.revision ?? 0;
 				transaction.update(ref, {
 					...data,
+					companions,
 					revision: currentRevision + 1,
 					updatedAt: FieldValue.serverTimestamp(),
 				});
@@ -54,6 +67,7 @@ export async function submitRSVP(
 					eventId,
 					invitationId,
 					...data,
+					companions,
 					revision: 1,
 					submittedAt: FieldValue.serverTimestamp(),
 					updatedAt: FieldValue.serverTimestamp(),

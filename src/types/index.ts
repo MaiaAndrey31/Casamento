@@ -118,6 +118,8 @@ export interface CompanionInfo {
   name: string;
   isMinor: boolean;
   age?: number;
+  /** Identidade persistente. Presente em todo companion gravado pela regra central. */
+  participantId?: string;
 }
 
 // ============================================================================

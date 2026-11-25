@@ -20,7 +20,7 @@
 
 import { requireValidatorSession, requireAdminSession } from '@/lib/auth/admin-session';
 import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
-import { generateParticipantUuid } from '@/lib/checkin/participant-ids';
+import { preparePersistedCompanions } from '@/lib/rsvp/companion-identity';
 import { revalidatePath } from 'next/cache';
 import type { ApiResponse } from '@/types';
 import { z } from 'zod';
@@ -222,8 +222,36 @@ export async function decideExtraCompanionRequestAction(
  invitationId = requestData.invitationId;
 
  if (validation.data.decision === 'approved') {
- // Gerar UUID persistente para o acompanhante extra
- participantId = generateParticipantUuid();
+ // Adicionar acompanhante extra ao RSVP do convite
+ const rsvpRef = adminDb
+ .collection('events')
+ .doc(eventId)
+ .collection('rsvps')
+ .doc(invitationId);
+
+ const rsvpDoc = await transaction.get(rsvpRef);
+ const rsvpData = rsvpDoc.exists ? rsvpDoc.data() : undefined;
+ const currentCompanions = Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
+
+ // REGRA CENTRAL: o mesmo preparador do RSVP público, executado dentro
+ // desta transação. IDs existentes são preservados; o novo acompanhante
+ // recebe um UUID mesmo que já exista um homônimo no convite.
+ const preparedCompanions = preparePersistedCompanions({
+ incoming: [
+ ...currentCompanions,
+ {
+ name: companionName,
+ isMinor: Boolean(requestData?.isMinor),
+ age: requestData?.age || undefined,
+ addedViaExtraRequest: true,
+ addedAt: new Date().toISOString(),
+ },
+ ],
+ existing: currentCompanions,
+ forceNewIndexes: [currentCompanions.length],
+ });
+
+ participantId = preparedCompanions[preparedCompanions.length - 1].participantId;
 
  // Atualizar solicitação com status aprovado e participantId
  transaction.update(requestRef, {
@@ -235,32 +263,10 @@ export async function decideExtraCompanionRequestAction(
  updatedAt: FieldValue.serverTimestamp(),
  });
 
- // Adicionar acompanhante extra ao RSVP do convite
- const rsvpRef = adminDb
- .collection('events')
- .doc(eventId)
- .collection('rsvps')
- .doc(invitationId);
-
- const rsvpDoc = await transaction.get(rsvpRef);
-
  if (rsvpDoc.exists) {
- const rsvpData = rsvpDoc.data();
- const currentCompanions = Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
- const updatedCompanions = [
- ...currentCompanions,
- {
- participantId,
- name: companionName,
- isMinor: Boolean(requestData?.isMinor),
- age: requestData?.age || undefined,
- addedViaExtraRequest: true,
- addedAt: new Date().toISOString(),
- },
- ];
-
  transaction.update(rsvpRef, {
- companions: updatedCompanions,
+ companions: preparedCompanions,
+ revision: (rsvpData?.revision ?? 0) + 1,
  updatedAt: FieldValue.serverTimestamp(),
  });
  } else {
@@ -269,14 +275,8 @@ export async function decideExtraCompanionRequestAction(
  eventId,
  invitationId,
  attendanceStatus: 'confirmed',
- companions: [{
- participantId,
- name: companionName,
- isMinor: Boolean(requestData?.isMinor),
- age: requestData?.age || undefined,
- addedViaExtraRequest: true,
- addedAt: new Date().toISOString(),
- }],
+ confirmedGuestIds: [],
+ companions: preparedCompanions,
  dietaryRestrictions: [],
  songSuggestion: '',
  personalMessage: '',

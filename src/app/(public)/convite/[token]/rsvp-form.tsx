@@ -22,7 +22,7 @@ type RSVPFormData = {
 	fullName: string;
 	phone: string;
 	attendanceStatus: 'confirmed' | 'declined';
-	companions: Array<{ name: string; isMinor: boolean; age?: number }>;
+	companions: Array<{ name: string; isMinor: boolean; age?: number; participantId?: string }>;
 	dietaryRestrictions: string[];
 	songSuggestion: string;
 	personalMessage: string;
@@ -81,6 +81,8 @@ export function RsvpForm({ invitationId, eventId, displayName, maxCompanions, gu
  name: f.name || '',
  isMinor: f.isMinor || false,
  age: f.age,
+ // Preserva a identidade se o formulário for reutilizado para edição.
+ participantId: f.participantId,
  }));
  replace(newCompanions);
  }

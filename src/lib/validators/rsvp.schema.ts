@@ -48,6 +48,12 @@ export const rsvpFormSchema = z.object({
 		name: z.string().min(2, 'Nome do acompanhante é obrigatório').max(200),
 		isMinor: z.boolean().default(false),
 		age: z.number().int().positive().optional(),
+		// Identidade persistente: preservada quando o cliente a reenvia.
+		// A geração/atribuição é feita no servidor, na camada de persistência.
+		participantId: z.string()
+			.regex(/^[a-zA-Z0-9_-]{8,64}$/, 'Identificador de acompanhante inválido')
+			.optional()
+			.or(z.literal('')),
 	})).max(10, 'Limite de acompanhantes excedido').default([]),
 	dietaryRestrictions: z.array(z.string()).default([]),
 	songSuggestion: z.string().max(300, 'Máximo de 300 caracteres').optional().default(''),

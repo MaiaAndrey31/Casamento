@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { preparePersistedCompanions } from '@/lib/rsvp/companion-identity';
 
 // Dados de teste configuráveis por cenário
 interface TestFixture {
@@ -244,6 +245,30 @@ describe('listAvailableParticipants — Identidade Persistente', () => {
 		spy.mockRestore();
 	});
 
+	it('não deve chamar a regra central de preparação durante a listagem', async () => {
+		setupFirestoreMock({
+			assignments: [],
+			invitations: [{ id: 'inv-read', data: { invitationStatus: 'active', guestIds: ['guest-read'] } }],
+			rsvps: [{
+				id: 'inv-read',
+				data: {
+					attendanceStatus: 'confirmed',
+					companions: [{ name: 'Sem ID', isMinor: false }],
+				},
+			}],
+			guests: new Map([['guest-read', { fullName: 'Titular Leitura', active: true }]]),
+		});
+
+		const identityModule = await import('@/lib/rsvp/companion-identity');
+		const spy = vi.spyOn(identityModule, 'preparePersistedCompanions');
+
+		const { listAvailableParticipants } = await import('./tables.repository');
+		await listAvailableParticipants('test-event');
+
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
 	it('deve excluir convite totalmente distribuído da lista', async () => {
 		setupFirestoreMock({
 			assignments: [
@@ -295,5 +320,84 @@ describe('listAvailableParticipants — Identidade Persistente', () => {
 		expect(result.find(p => p.participantName === 'Acomp Pastor 1')).toBeTruthy();
 		expect(result.find(p => p.participantName === 'Acomp Pastor 2')).toBeTruthy();
 		expect(result.filter(p => p.invitationId === 'inv-pastor')).toHaveLength(2);
+	});
+});
+
+describe('Confirmação → disponibilidade imediata no modal de mesas', () => {
+	beforeEach(() => {
+		vi.resetModules();
+		vi.clearAllMocks();
+	});
+
+	it('11/13. acompanhante recém-confirmado aparece sem pendência em duas aberturas do modal', async () => {
+		// Simula o resultado real da confirmação de presença com 2 acompanhantes.
+		const persistedCompanions = preparePersistedCompanions({
+			incoming: [{ name: 'Adriano', isMinor: false }, { name: 'Beatriz', isMinor: false }],
+		});
+
+		setupFirestoreMock({
+			assignments: [],
+			invitations: [{ id: 'inv-novo', data: { invitationStatus: 'active', guestIds: ['guest-novo'] } }],
+			rsvps: [{
+				id: 'inv-novo',
+				data: { attendanceStatus: 'confirmed', companions: persistedCompanions },
+			}],
+			guests: new Map([['guest-novo', { fullName: 'Titular Novo', active: true }]]),
+		});
+
+		const { listAvailableParticipants } = await import('./tables.repository');
+		const firstOpen = await listAvailableParticipants('test-event');
+		const secondOpen = await listAvailableParticipants('test-event');
+
+		for (const name of ['Adriano', 'Beatriz']) {
+			const first = firstOpen.find(p => p.participantName === name);
+			const second = secondOpen.find(p => p.participantName === name);
+			expect(first).toBeTruthy();
+			expect(first?.pendingReconciliation).not.toBe(true);
+			expect(first?.participantId).toBe(second?.participantId);
+		}
+		expect(firstOpen.filter(p => p.pendingReconciliation)).toHaveLength(0);
+	});
+
+	it('12/13/14/15. atribuição, transferência e remoção refletem na disponibilidade', async () => {
+		const persistedCompanions = preparePersistedCompanions({
+			incoming: [{ name: 'Adriano', isMinor: false }, { name: 'Beatriz', isMinor: false }],
+		});
+		const adrianoId = persistedCompanions[0].participantId;
+		const beatrizId = persistedCompanions[1].participantId;
+
+		const fixture = (tableId: string | null) => ({
+			assignments: tableId ? [{
+				id: 'assign-adriano',
+				data: {
+					participantId: adrianoId,
+					tableId,
+					participantName: 'Adriano',
+					participantType: 'companion',
+					invitationId: 'inv-novo',
+					participantSource: 'rsvp',
+				},
+			}] : [],
+			invitations: [{ id: 'inv-novo', data: { invitationStatus: 'active', guestIds: ['guest-novo'] } }],
+			rsvps: [{
+				id: 'inv-novo',
+				data: { attendanceStatus: 'confirmed', companions: persistedCompanions },
+			}],
+			guests: new Map([['guest-novo', { fullName: 'Titular Novo', active: true }]]),
+		});
+
+		const availableNames = async (tableId: string | null) => {
+			setupFirestoreMock(fixture(tableId));
+			const { listAvailableParticipants } = await import('./tables.repository');
+			const result = await listAvailableParticipants('test-event');
+			return result.filter(p => p.participantType === 'companion').map(p => p.participantName);
+		};
+
+		// Após atribuir Adriano, ele desaparece da disponibilidade.
+		expect(await availableNames('mesa-1')).toEqual(['Beatriz']);
+		// Transferir para outra mesa continua fora da disponibilidade.
+		expect(await availableNames('mesa-2')).toEqual(['Beatriz']);
+		// Remover a atribuição devolve Adriano à disponibilidade.
+		expect(await availableNames(null)).toEqual(['Adriano', 'Beatriz']);
 	});
 });

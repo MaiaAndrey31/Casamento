@@ -164,7 +164,7 @@ export interface RSVPDTO {
 	eventId: string;
 	invitationId: string;
 	attendanceStatus: string;
-	companions: Array<{ name: string; isMinor: boolean; age?: number }>;
+	companions: Array<{ name: string; isMinor: boolean; age?: number; participantId?: string }>;
 	dietaryRestrictions: string[];
 	songSuggestion: string;
 	personalMessage: string;

@@ -20,7 +20,7 @@ export async function submitRsvpAction(
 		fullName: string;
 		phone: string;
 		attendanceStatus: 'confirmed' | 'declined';
-		companions: Array<{ name: string; isMinor: boolean; age?: number }>;
+		companions: Array<{ name: string; isMinor: boolean; age?: number; participantId?: string }>;
 		dietaryRestrictions: string[];
 		songSuggestion: string;
 		personalMessage: string;

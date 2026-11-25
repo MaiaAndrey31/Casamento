@@ -12,6 +12,8 @@
  * USO:
  *   node scripts/migrate-companion-ids.mjs              # dry-run
  *   node scripts/migrate-companion-ids.mjs --apply      # aplicar alterações
+ *   node scripts/migrate-companion-ids.mjs --apply --only=ID --uuid=UUID
+ *       aplicação escopada a um RSVP, usando um UUID previamente aprovado
  *
  * SEGURANÇA:
  *   - Idempotente: execuções consecutivas produzem o mesmo resultado.
@@ -32,6 +34,15 @@ import { randomUUID } from 'crypto';
 
 const EVENT_ID = process.env.NEXT_PUBLIC_EVENT_ID || 'casamento-andrey-amanda';
 const DRY_RUN = !process.argv.includes('--apply');
+const ONLY_RSVPS = (() => {
+	const flag = process.argv.find(arg => arg.startsWith('--only='));
+	return flag ? flag.slice('--only='.length).split(',').map(id => id.trim()).filter(Boolean) : [];
+})();
+const FIXED_UUID = (() => {
+	const flag = process.argv.find(arg => arg.startsWith('--uuid='));
+	return flag ? flag.slice('--uuid='.length).trim() : null;
+})();
+const UUID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
 
 // ============================================================================
 // CARREGAMENTO DE AMBIENTE
@@ -124,6 +135,16 @@ async function auditAndReconcile(db) {
 		.get();
 
 	console.log(`   RSVPs confirmados: ${rsvpsSnap.size}\n`);
+
+	if (FIXED_UUID) {
+		if (!UUID_PATTERN.test(FIXED_UUID)) {
+			throw new Error(`UUID inválido informado: ${FIXED_UUID}`);
+		}
+		const uuidInUse = assignmentsSnap.docs.some(d => d.data()?.participantId === FIXED_UUID)
+			|| rsvpsSnap.docs.some(d => (Array.isArray(d.data()?.companions) ? d.data().companions : [])
+				.some(c => c?.participantId === FIXED_UUID));
+		if (uuidInUse) throw new Error(`UUID_JA_EM_USO: ${FIXED_UUID}`);
+	}
 
 	// 3. Analisar cada RSVP
 	const report = {
@@ -218,7 +239,8 @@ async function auditAndReconcile(db) {
 				});
 			} else {
 				// Cenário C: sem ID e sem atribuição — gerar novo UUID
-				const newId = randomUUID();
+				// (ou utilizar o UUID aprovado explicitamente, quando informado)
+				const newId = FIXED_UUID || randomUUID();
 				report.newIdsNeeded++;
 
 				updatedCompanions.push({ ...companion, participantId: newId });
@@ -240,7 +262,32 @@ async function auditAndReconcile(db) {
 				changes,
 				currentCompanions: companions,
 				updatedCompanions,
+				currentRevision: rsvpData.revision ?? null,
 			});
+		}
+	}
+
+	// Escopo explícito: nunca aplicar fora dos RSVPs autorizados.
+	if (ONLY_RSVPS.length > 0) {
+		const allowed = new Set(ONLY_RSVPS);
+		const outsiders = report.rsvpsToModify.filter(m => !allowed.has(m.invitationId));
+		if (outsiders.length > 0) {
+			throw new Error(
+				`SCOPE_EXCEEDED: existem pendências em ${outsiders.map(m => m.invitationId).join(', ')} ` +
+				'fora do escopo autorizado. Abortando.',
+			);
+		}
+		report.rsvpsToModify = report.rsvpsToModify.filter(m => allowed.has(m.invitationId));
+	}
+	if (FIXED_UUID) {
+		const generateCount = report.rsvpsToModify.reduce(
+			(total, mod) => total + mod.changes.filter(c => c.action === 'GENERATE').length,
+			0,
+		);
+		if (generateCount !== 1) {
+			throw new Error(
+				`SCOPE_EXCEEDED: UUID fixo exatamente uma geração autorizada; encontradas ${generateCount}.`,
+			);
 		}
 	}
 
@@ -368,10 +415,16 @@ async function applyChanges(db, report) {
 					? currentData.companions
 					: [];
 
-				// Verificar se o array não mudou concorrentemente
-				if (currentCompanions.length !== mod.currentCompanions.length) {
+				// Validação de concorrência: array completo e revision.
+				if (JSON.stringify(currentCompanions) !== JSON.stringify(mod.currentCompanions)) {
 					throw new Error(
-						`Conflito concorrente: RSVP ${mod.invitationId} tinha ${mod.currentCompanions.length} companions, agora tem ${currentCompanions.length}`
+						`Conflito concorrente: companions do RSVP ${mod.invitationId} mudaram desde a auditoria.`
+					);
+				}
+				const currentRevision = currentData?.revision ?? null;
+				if (mod.currentRevision !== null && currentRevision !== mod.currentRevision) {
+					throw new Error(
+						`Conflito concorrente: RSVP ${mod.invitationId} passou da revisão ${mod.currentRevision} para ${currentRevision}.`
 					);
 				}
 
