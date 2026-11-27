@@ -10,7 +10,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAdminSession } from '@/lib/auth/admin-session';
-import type { ApiResponse, SpecialParticipantCategory } from '@/types';
+import type { ApiResponse, AvailableParticipant } from '@/types';
 import { z } from 'zod';
 
 // ============================================================================
@@ -38,6 +38,8 @@ const assignParticipantSchema = z.object({
 	participantName: z.string().min(1),
 	participantType: z.enum(['titular', 'companion', 'special']),
 	invitationId: z.string().optional(),
+	participantSource: z.enum(['rsvp', 'special']).optional(),
+	specialCategory: z.enum(['groom', 'bride', 'child', 'family', 'other']).optional(),
 });
 
 const unassignParticipantSchema = z.object({
@@ -298,22 +300,30 @@ export async function unassignParticipantAction(
 			return { success: false, error: result.error };
 		}
 
-		// Audit log
-		const { adminDb } = await import('@/lib/firebase/admin');
-		const { FieldValue } = await import('firebase-admin/firestore');
-		await adminDb.collection('events').doc(eventId).collection('auditLogs').add({
-			eventId,
-			action: 'table.assignment.removed',
-			actorId: session.uid,
-			targetId: validation.data.participantId,
-			targetType: 'tableAssignment',
-			timestamp: FieldValue.serverTimestamp(),
-			metadata: { participantId: validation.data.participantId },
-		});
+		// Audit log — apenas quando algo foi efetivamente removido.
+		if ((result.removedCount ?? 0) > 0) {
+			const { adminDb } = await import('@/lib/firebase/admin');
+			const { FieldValue } = await import('firebase-admin/firestore');
+			await adminDb.collection('events').doc(eventId).collection('auditLogs').add({
+				eventId,
+				action: 'table.assignment.removed',
+				actorId: session.uid,
+				targetId: validation.data.participantId,
+				targetType: 'tableAssignment',
+				timestamp: FieldValue.serverTimestamp(),
+				metadata: { participantId: validation.data.participantId, removedCount: result.removedCount },
+			});
+		}
 
 		revalidatePath('/admin/mesas');
 
-		return { success: true, message: 'Participante removido da mesa.' };
+		return {
+			success: true,
+			data: { removedCount: result.removedCount ?? 0 },
+			message: result.removedCount === 0
+				? 'Participante já estava sem mesa. Nenhuma alteração necessária.'
+				: 'Participante removido da mesa.',
+		};
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Erro desconhecido';
 		console.error('[TablesAction] Falha ao remover atribuição:', message);
@@ -379,17 +389,21 @@ export async function assignGroupAction(
 
  const capacity = tableDoc.data()?.capacity ?? 0;
 
- // Contar atribuições atuais
- const assignmentsCountSnap = await adminDb
+ // Contar atribuições DENTRO do snapshot da transação (serializável).
+ const assignmentsSnap = await transaction.get(
+ adminDb
  .collection('events')
  .doc(eventId)
  .collection('tableAssignments')
- .where('tableId', '==', validation.data.tableId)
- .count()
- .get();
+ .where('tableId', '==', validation.data.tableId),
+ );
 
- const currentOccupancy = assignmentsCountSnap.data().count ?? 0;
+ const currentOccupancy = assignmentsSnap.size;
  const requestedCount = validation.data.participants.length;
+ const idsNoGrupo = new Set(validation.data.participants.map(p => p.participantId));
+ if (idsNoGrupo.size !== validation.data.participants.length) {
+ throw new Error('DUPLICATE_GROUP');
+ }
 
  if (currentOccupancy + requestedCount > capacity) {
  throw new Error(`TABLE_CAPACITY_EXCEEDED:${capacity}:${currentOccupancy}:${requestedCount}`);
@@ -398,13 +412,14 @@ export async function assignGroupAction(
  // 2. Validar cada participante
  for (const participant of validation.data.participants) {
  // Verificar duplicidade
- const existingSnap = await adminDb
+ const existingSnap = await transaction.get(
+ adminDb
  .collection('events')
  .doc(eventId)
  .collection('tableAssignments')
  .where('participantId', '==', participant.participantId)
- .limit(1)
- .get();
+ .limit(1),
+ );
 
  if (!existingSnap.empty) {
  throw new Error(`DUPLICATE:${participant.participantName}`);
@@ -522,6 +537,13 @@ export async function assignGroupAction(
  const name = message.split(':')[1];
  return { success: false, error: `${name} está desativado(a) e não pode ser atribuído(a).` };
  }
+ if (message === 'DUPLICATE_GROUP') {
+ return { success: false, error: 'O grupo contém o mesmo participante mais de uma vez.' };
+ }
+ if (message.startsWith('SPECIAL_INACTIVE:')) {
+ const name = message.split(':')[1];
+ return { success: false, error: `${name} está inativo(a) e não pode ser atribuído(a).` };
+ }
 
  console.error('[TablesAction] Falha ao atribuir grupo:', message);
  return { success: false, error: `Falha ao atribuir grupo: ${message}` };
@@ -633,7 +655,7 @@ export async function refreshTablesDataAction(): Promise<ApiResponse<{
  */
 export async function listAvailableParticipantsAction(
 	formData: Record<string, unknown>,
-): Promise<ApiResponse<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus?: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory; pendingReconciliation?: boolean }>>> {
+): Promise<ApiResponse<AvailableParticipant[]>> {
 	try {
  await requireAdminSession();
 	} catch {
@@ -680,6 +702,10 @@ export async function transferParticipantAction(
 
 		if (!result.success) {
 			return { success: false, error: result.error };
+		}
+
+		if (result.noop) {
+			return { success: true, message: 'O participante já estava nesta mesa. Nenhuma alteração necessária.' };
 		}
 
 		// Audit log

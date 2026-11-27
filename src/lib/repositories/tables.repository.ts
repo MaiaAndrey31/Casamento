@@ -8,7 +8,7 @@
  * Timestamps antes de retornar dados para Server/Client Components.
  */
 
-import type { SpecialParticipantCategory, Table, TableAssignment, TableWithOccupancy, TablesDashboardStats } from '@/types';
+import type { AvailableParticipant, SpecialParticipantCategory, Table, TableAssignment, TableWithOccupancy, TablesDashboardStats } from '@/types';
 import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
 
 const TABLES_SUBCOLLECTION = 'tables';
@@ -319,6 +319,8 @@ export async function assignParticipant(
 		participantName: string;
 		participantType: 'titular' | 'companion' | 'special';
 		invitationId?: string;
+		participantSource?: 'rsvp' | 'special';
+		specialCategory?: SpecialParticipantCategory;
 	},
 	adminUid: string,
 ): Promise<{ success: boolean; assignmentId?: string; error?: string }> {
@@ -345,27 +347,28 @@ export async function assignParticipant(
 			const capacity = tableData?.capacity ?? 0;
 
 			// Contar atribuições atuais
-			const assignmentsCountSnap = await adminDb
-				.collection('events')
-				.doc(eventId)
-				.collection(ASSIGNMENTS_SUBCOLLECTION)
-				.where('tableId', '==', data.tableId)
-				.count()
-				.get();
+			const assignmentsSnap = await transaction.get(
+				adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection(ASSIGNMENTS_SUBCOLLECTION)
+					.where('tableId', '==', data.tableId),
+			);
 
-			const currentOccupancy = assignmentsCountSnap.data().count ?? 0;
+			const currentOccupancy = assignmentsSnap.size;
 			if (currentOccupancy >= capacity) {
 				throw new Error('TABLE_FULL');
 			}
 
 			// 2. Verificar duplicidade — participante já atribuído a alguma mesa?
-			const existingAssignmentSnap = await adminDb
-				.collection('events')
-				.doc(eventId)
-				.collection(ASSIGNMENTS_SUBCOLLECTION)
-				.where('participantId', '==', data.participantId)
-				.limit(1)
-				.get();
+			const existingAssignmentSnap = await transaction.get(
+				adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection(ASSIGNMENTS_SUBCOLLECTION)
+					.where('participantId', '==', data.participantId)
+					.limit(1),
+			);
 
 			if (!existingAssignmentSnap.empty) {
 				const existingTableId = existingAssignmentSnap.docs[0].data()?.tableId;
@@ -373,7 +376,7 @@ export async function assignParticipant(
 			}
 
 			// 3. Se for titular RSVP, verificar se o guest está ativo; pular para especiais
-			const isSpecial = (data as Record<string, unknown>).participantSource === 'special';
+			const isSpecial = data.participantSource === 'special';
 			if (data.participantType === 'titular' && !isSpecial) {
 				const guestRef = adminDb
 					.collection('events')
@@ -420,7 +423,7 @@ export async function assignParticipant(
 
 			if (isSpecial) {
 				assignmentData.participantSource = 'special';
-				assignmentData.specialCategory = (data as Record<string, unknown>).specialCategory || 'other';
+				assignmentData.specialCategory = data.specialCategory || 'other';
 			} else {
 				assignmentData.participantSource = 'rsvp';
 				assignmentData.invitationId = data.invitationId || '';
@@ -447,6 +450,9 @@ export async function assignParticipant(
 		if (message === 'GUEST_INACTIVE') {
 			return { success: false, error: 'Este convidado está desativado e não pode ser atribuído a uma mesa.' };
 		}
+		if (message === 'SPECIAL_INACTIVE') {
+			return { success: false, error: 'Este participante especial está inativo e não pode ser atribuído.' };
+		}
 
 		console.error('[TablesRepository] Falha ao atribuir participante:', message);
 		return { success: false, error: message };
@@ -459,24 +465,28 @@ export async function assignParticipant(
 export async function unassignParticipant(
 	eventId: string,
 	participantId: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; removedCount?: number; error?: string }> {
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
+		let removedCount = 0;
 
-		const assignmentsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection(ASSIGNMENTS_SUBCOLLECTION)
-			.where('participantId', '==', participantId)
-			.limit(1)
-			.get();
+		// Transacional e idempotente: remove TODAS as atribuições da identidade,
+		// incluindo duplicatas legadas, sem tocar em qualquer outro documento.
+		await adminDb.runTransaction(async (transaction) => {
+			const snap = await transaction.get(
+				adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection(ASSIGNMENTS_SUBCOLLECTION)
+					.where('participantId', '==', participantId),
+			);
+			for (const doc of snap.docs) {
+				transaction.delete(doc.ref);
+				removedCount++;
+			}
+		});
 
-		if (assignmentsSnap.empty) {
-			return { success: false, error: 'Participante não está atribuído a nenhuma mesa.' };
-		}
-
-		await assignmentsSnap.docs[0].ref.delete();
-		return { success: true };
+		return { success: true, removedCount };
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Erro desconhecido';
 		console.error('[TablesRepository] Falha ao remover atribuição:', message);
@@ -495,20 +505,23 @@ export async function transferParticipant(
 		targetTableId: string;
 	},
 	adminUid: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; noop?: boolean; error?: string }> {
 	try {
 		const { adminDb } = await import('@/lib/firebase/admin');
 		const { FieldValue } = await import('firebase-admin/firestore');
 
+		let noop = false;
+
 		await adminDb.runTransaction(async (transaction) => {
-			// 1. Encontrar atribuição atual
-			const currentAssignmentSnap = await adminDb
-				.collection('events')
-				.doc(eventId)
-				.collection(ASSIGNMENTS_SUBCOLLECTION)
-				.where('participantId', '==', data.participantId)
-				.limit(1)
-				.get();
+			// 1. Encontrar atribuição atual DENTRO da transação
+			const currentAssignmentSnap = await transaction.get(
+				adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection(ASSIGNMENTS_SUBCOLLECTION)
+					.where('participantId', '==', data.participantId)
+					.limit(1),
+			);
 
 			if (currentAssignmentSnap.empty) {
 				throw new Error('NOT_CURRENTLY_ASSIGNED');
@@ -519,7 +532,35 @@ export async function transferParticipant(
 
 			// Se já está na mesa destino, não fazer nada
 			if (currentData.tableId === data.targetTableId) {
+				noop = true;
 				return; // No-op
+			}
+
+			// Revalidar que o participante continua elegível dentro da transação.
+			const source = currentData.participantSource === 'special' ? 'special' : 'rsvp';
+			if (source === 'special') {
+				const specialDoc = await transaction.get(
+					adminDb.collection('events').doc(eventId)
+						.collection('specialParticipants').doc(data.participantId),
+				);
+				if (!specialDoc.exists || specialDoc.data()?.active === false) {
+					throw new Error('PARTICIPANT_INACTIVE');
+				}
+			} else if (currentData.participantType === 'titular') {
+				const guestDoc = await transaction.get(
+					adminDb.collection('events').doc(eventId).collection('guests').doc(data.participantId),
+				);
+				if (guestDoc.exists && guestDoc.data()?.active === false) {
+					throw new Error('PARTICIPANT_INACTIVE');
+				}
+			} else if (currentData.participantType === 'companion' && currentData.invitationId) {
+				const rsvpDoc = await transaction.get(
+					adminDb.collection('events').doc(eventId).collection('rsvps').doc(currentData.invitationId),
+				);
+				const companions = Array.isArray(rsvpDoc.data()?.companions) ? rsvpDoc.data()!.companions : [];
+				if (!rsvpDoc.exists || !companions.some((c: { participantId?: string }) => c.participantId === data.participantId)) {
+					throw new Error('PARTICIPANT_NOT_FOUND');
+				}
 			}
 
 			// 2. Verificar capacidade da mesa destino
@@ -536,15 +577,15 @@ export async function transferParticipant(
 
 			const targetCapacity = targetTableDoc.data()?.capacity ?? 0;
 
-			const targetAssignmentsSnap = await adminDb
-				.collection('events')
-				.doc(eventId)
-				.collection(ASSIGNMENTS_SUBCOLLECTION)
-				.where('tableId', '==', data.targetTableId)
-				.count()
-				.get();
+			const targetAssignmentsSnap = await transaction.get(
+				adminDb
+					.collection('events')
+					.doc(eventId)
+					.collection(ASSIGNMENTS_SUBCOLLECTION)
+					.where('tableId', '==', data.targetTableId),
+			);
 
-			const targetOccupancy = targetAssignmentsSnap.data().count ?? 0;
+			const targetOccupancy = targetAssignmentsSnap.size;
 			if (targetOccupancy >= targetCapacity) {
 				throw new Error('TARGET_TABLE_FULL');
 			}
@@ -580,7 +621,7 @@ export async function transferParticipant(
 			transaction.set(newAssignmentRef, transferData);
 		});
 
-		return { success: true };
+		return { success: true, noop };
 	} catch (e) {
 		const message = e instanceof Error ? e.message : String(e);
 
@@ -592,6 +633,12 @@ export async function transferParticipant(
 		}
 		if (message === 'TARGET_TABLE_FULL') {
 			return { success: false, error: 'A mesa destino está cheia.' };
+		}
+		if (message === 'PARTICIPANT_INACTIVE') {
+			return { success: false, error: 'Este participante está inativo e não pode ser transferido.' };
+		}
+		if (message === 'PARTICIPANT_NOT_FOUND') {
+			return { success: false, error: 'Participante não encontrado na confirmação de presença.' };
 		}
 
 		console.error('[TablesRepository] Falha ao transferir participante:', message);
@@ -635,88 +682,10 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 
 		const occupiedSeats = assignmentsCountSnap.data().count ?? 0;
 
-		// Buscar convites ativos para filtrar RSVPs de convites revogados/expirados
-		const activeInvitationsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('invitations')
-			.where('invitationStatus', '==', 'active')
-			.get();
-
-		const activeInvitationIds = new Set<string>();
-		activeInvitationsSnap.docs.forEach(doc => {
-			activeInvitationIds.add(doc.id);
-		});
-
-		// Convidados sem mesa: titulares ativos (via invitations.guestIds) + companions confirmados - atribuições
-		const confirmedRsvpsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('rsvps')
-			.where('attendanceStatus', '==', 'confirmed')
-			.get();
-
-		// Contar participantes elegíveis usando invitations.guestIds como fonte canônica
-		// de titulares (confirmedGuestIds do RSVP está sempre vazio).
-		// Filtrar convites revogados e guests inativos para consistência com listAvailableParticipants.
-		let totalConfirmedParticipants = 0;
-
-		for (const rsvpDoc of confirmedRsvpsSnap.docs) {
-			const invitationId = rsvpDoc.id;
-
-			// Ignorar RSVPs de convites revogados/expirados
-			if (!activeInvitationIds.has(invitationId)) continue;
-
-			// Buscar guests do convite via invitations.guestIds (fonte canônica de titulares)
-			const invDoc = await adminDb
-				.collection('events')
-				.doc(eventId)
-				.collection('invitations')
-				.doc(invitationId)
-				.get();
-
-			const invData = invDoc.exists ? invDoc.data() : null;
-			const guestIds: string[] = Array.isArray(invData?.guestIds) ? invData.guestIds : [];
-
-			// Contar apenas guests ativos
-			let activeTitularCount = 0;
-			for (const guestId of guestIds) {
-				const guestDoc = await adminDb
-					.collection('events')
-					.doc(eventId)
-					.collection('guests')
-					.doc(guestId)
-					.get();
-				if (guestDoc.exists && guestDoc.data()?.active !== false) {
-					activeTitularCount++;
-				}
-			}
-
-			// Contar companions confirmados — apenas os que possuem participantId persistente.
-			// Companions sem participantId são dados legados não reconciliados e não devem
-			// ser contabilizados até que a migração resolva sua identidade. Isso alinha o
-			// dashboard com listAvailableParticipants, que também ignora companions sem ID.
-			const rsvpData = rsvpDoc.data();
-			const rawCompanions: Array<{ participantId?: string }> =
-				Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
-			const companionsWithId = rawCompanions.filter(c => c.participantId).length;
-
-			totalConfirmedParticipants += activeTitularCount + companionsWithId;
-		}
-
-		// Contar participantes especiais ativos
-		const specialParticipantsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('specialParticipants')
-			.where('active', '==', true)
-			.count()
-			.get();
-
-		const activeSpecialCount = specialParticipantsSnap.data().count ?? 0;
-
-		const totalEligibleParticipants = totalConfirmedParticipants + activeSpecialCount;
-		const guestsWithoutTable = Math.max(0, totalEligibleParticipants - occupiedSeats);
+		// Contagens derivadas da fonte única de verdade (mesma regra do modal).
+		const { getParticipantCounts } = await import('@/lib/tables/participant-directory');
+		const counts = await getParticipantCounts(eventId);
+		const guestsWithoutTable = counts.participantsWithoutTable;
 
 		return {
 			totalTables,
@@ -724,6 +693,11 @@ export async function getTablesDashboardStats(eventId: string): Promise<TablesDa
 			occupiedSeats,
 			availableSeats: Math.max(0, totalSeats - occupiedSeats),
 			guestsWithoutTable,
+			eligibleParticipants: counts.eligibleParticipants,
+			participantsWithTable: counts.participantsWithTable,
+			participantsWithoutTable: counts.participantsWithoutTable,
+			orphanAssignments: counts.orphanAssignments,
+			duplicateAssignments: counts.duplicateAssignments,
 		};
 	} catch (e) {
 		console.error('[TablesRepository] Falha ao calcular stats:', e);
@@ -776,11 +750,20 @@ export async function getTableAssignmentsByParticipantIds(
  const tableIds = new Set<string>();
  const pidToTableId = new Map<string, string>();
 
- for (const doc of assignmentDocs) {
+ // Em caso de duplicatas legadas, a atribuição mais recente prevalece.
+ const timeOf = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
+ const value = doc.data()?.assignedAt;
+ if (value && typeof value.toMillis === 'function') return value.toMillis();
+ if (value instanceof Date) return value.getTime();
+ return 0;
+ };
+ const ordered = [...assignmentDocs].sort((a, b) => timeOf(b) - timeOf(a));
+
+ for (const doc of ordered) {
  const data = doc.data();
  const pid = data?.participantId as string;
  const tid = data?.tableId as string;
- if (pid && tid) {
+ if (pid && tid && !pidToTableId.has(pid)) {
  pidToTableId.set(pid, tid);
  tableIds.add(tid);
  }
@@ -820,179 +803,16 @@ export async function getTableAssignmentsByParticipantIds(
 }
 
 /**
- * Normaliza string para busca: minúsculas, sem acentos, trim.
- */
-function normalizeSearch(value: string): string {
-	return value
-		.toLowerCase()
-		.normalize('NFD')
-		.replace(/[̀-ͯ]/g, '')
-		.trim();
-}
-
-/**
- * Lista participantes disponíveis para atribuição (não atribuídos a nenhuma mesa).
- * Retorna guests ativos confirmados + companions de RSVPs confirmados.
+ * Lista participantes disponíveis para atribuição.
  *
- * OPERAÇÃO EXCLUSIVAMENTE DE LEITURA — nenhuma escrita no Firestore.
- * Companions sem participantId persistente são ignorados (dados legados);
- * devem ser reconciliados pelo script migrate-companion-ids antes de aparecerem aqui.
- *
- * Também filtra convites revogados/expirados para consistência com o dashboard.
+ * OPERAÇÃO EXCLUSIVAMENTE DE LEITURA — delega ao diretório central de
+ * participantes, que define elegibilidade e disponibilidade por participantId.
+ * Nenhuma escrita e nenhuma geração de UUID durante a consulta.
  */
 export async function listAvailableParticipants(
 	eventId: string,
 	searchTerm?: string,
-): Promise<Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion' | 'special'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean; participantSource?: 'rsvp' | 'special'; specialCategory?: SpecialParticipantCategory; pendingReconciliation?: boolean }>> {
-	try {
-		const { adminDb } = await import('@/lib/firebase/admin');
-		const { FieldValue } = await import('firebase-admin/firestore');
-		// Buscar todas as atribuições existentes
-		const allAssignmentsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection(ASSIGNMENTS_SUBCOLLECTION)
-			.get();
-
-		const assignedParticipantIds = new Set<string>();
-		allAssignmentsSnap.docs.forEach(doc => {
-			assignedParticipantIds.add(doc.data()?.participantId);
-		});
-
-		// Buscar convites ativos para filtrar RSVPs de convites revogados
-		const activeInvitationsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('invitations')
-			.where('invitationStatus', '==', 'active')
-			.get();
-
-		const activeInvitationIds = new Set<string>();
-		activeInvitationsSnap.docs.forEach(doc => {
-			activeInvitationIds.add(doc.id);
-		});
-
-		// Buscar RSVPs confirmados
-		const confirmedRsvpsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('rsvps')
-			.where('attendanceStatus', '==', 'confirmed')
-			.get();
-
-		const available: Array<{ participantId: string; participantName: string; participantType: 'titular' | 'companion'; invitationId: string; rsvpStatus: string; alreadyAssigned?: boolean; pendingReconciliation?: boolean }> = [];
-		const normalizedSearch = searchTerm ? normalizeSearch(searchTerm) : '';
-
-		for (const rsvpDoc of confirmedRsvpsSnap.docs) {
-			const invitationId = rsvpDoc.id;
-
-			// Ignorar RSVPs de convites revogados/expirados
-			if (!activeInvitationIds.has(invitationId)) continue;
-
-			const rsvpData = rsvpDoc.data();
-
-			// IDENTIFICAÇÃO DO TITULAR: usar invitations.guestIds[0] como fonte canônica.
-			// confirmedGuestIds do RSVP está SEMPRE vazio (submitRsvpAction passa []),
-			// então NÃO pode ser usado como fonte de titulares.
-			// guestIds[0] é o titular original cadastrado pelo administrador.
-			const invDoc = await adminDb
-				.collection('events')
-				.doc(eventId)
-				.collection('invitations')
-				.doc(invitationId)
-				.get();
-
-			const invData = invDoc.exists ? invDoc.data() : null;
-			const guestIds: string[] = Array.isArray(invData?.guestIds) ? invData.guestIds : [];
-
-			// Adicionar apenas guests NÃO atribuídos como titulares disponíveis.
-			// Titulares já atribuídos são excluídos da lista de disponíveis;
-			// o nome do grupo é recuperado via getInvitationTitularNamesAction no client.
-			for (const guestId of guestIds) {
-				if (assignedParticipantIds.has(guestId)) continue;
-
-				const guestDoc = await adminDb
-					.collection('events')
-					.doc(eventId)
-					.collection('guests')
-					.doc(guestId)
-					.get();
-
-				if (!guestDoc.exists || guestDoc.data()?.active === false) continue;
-
-				const guestName = guestDoc.data()?.fullName || 'Desconhecido';
-
-				if (normalizedSearch && !normalizeSearch(guestName).includes(normalizedSearch)) continue;
-
-				available.push({
-					participantId: guestId,
-					participantName: guestName,
-					participantType: 'titular',
-					invitationId,
-					rsvpStatus: 'confirmed',
-				});
-			}
-
-			// Adicionar companions — distinguir entre identificados e pendentes de reconciliação.
-			// Companions COM participantId persistente: filtrar por atribuição normalmente.
-			// Companions SEM participantId: dados legados não reconciliados. NÃO gerar UUIDs
-			// efêmeros (causaria identidades diferentes entre consultas). Incluir na lista com
-			// flag pendingReconciliation=true para visibilidade administrativa, mas impedir
-			// atribuição até que a migração reconcile o identificador.
-			const rawCompanions: Array<{ participantId?: string; name?: string; isMinor?: boolean; age?: number }> =
-				Array.isArray(rsvpData?.companions) ? rsvpData.companions : [];
-
-			for (const companion of rawCompanions) {
-				const companionName = companion.name || 'Acompanhante';
-				if (normalizedSearch && !normalizeSearch(companionName).includes(normalizedSearch)) continue;
-
-				if (!companion.participantId) {
-					// Companion legado sem identidade persistente — pendente de reconciliação
-					available.push({
-						participantId: '',
-						participantName: companionName,
-						participantType: 'companion',
-						invitationId,
-						rsvpStatus: 'confirmed',
-						pendingReconciliation: true,
-					});
-					continue;
-				}
-
-				if (assignedParticipantIds.has(companion.participantId)) continue;
-
-				available.push({
-					participantId: companion.participantId,
-					participantName: companionName,
-					participantType: 'companion',
-					invitationId,
-					rsvpStatus: 'confirmed',
-				});
-			}
-		}
-
-		// Integrar participantes especiais ativos na lista de disponíveis
-		const { listAvailableSpecialParticipants } = await import('@/lib/repositories/special-participants.repository');
-		const specialParticipants = await listAvailableSpecialParticipants(eventId, searchTerm);
-
-		// Unir listas: RSVP confirmados + participantes especiais
-		const combined = [
-			...available,
-			...specialParticipants.map(sp => ({
-				participantId: sp.participantId,
-				participantName: sp.participantName,
-				participantType: sp.participantType as 'titular' | 'companion' | 'special',
-				invitationId: sp.invitationId,
-				rsvpStatus: sp.rsvpStatus,
-				alreadyAssigned: sp.alreadyAssigned,
-				participantSource: sp.participantSource,
-				specialCategory: sp.specialCategory,
-			})),
-		];
-
-		return combined.sort((a, b) => normalizeSearch(a.participantName).localeCompare(normalizeSearch(b.participantName)));
-	} catch (e) {
-		console.error('[TablesRepository] Falha ao listar participantes disponíveis:', e);
-		return [];
-	}
+): Promise<AvailableParticipant[]> {
+	const { listAvailableParticipants: resolve } = await import('@/lib/tables/participant-directory');
+	return resolve(eventId, searchTerm);
 }

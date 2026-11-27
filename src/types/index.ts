@@ -272,6 +272,23 @@ export interface Table {
 
 export type ParticipantSource = 'rsvp' | 'special';
 
+/**
+ * Participante elegível para distribuição em mesas.
+ * Fonte única de verdade compartilhada por repositórios, actions e client.
+ */
+export interface AvailableParticipant {
+  participantId: string;
+  participantName: string;
+  participantType: 'titular' | 'companion' | 'special';
+  invitationId: string; // '' para especiais; placeholder não é invitationId real
+  rsvpStatus?: string;
+  alreadyAssigned?: boolean;
+  participantSource?: ParticipantSource;
+  specialCategory?: SpecialParticipantCategory;
+  /** Companion legado sem ID: visível para diagnóstico, não selecionável. */
+  pendingReconciliation?: boolean;
+}
+
 export interface TableAssignment {
   id: string;
   eventId: string;
@@ -298,6 +315,13 @@ export interface TablesDashboardStats {
   occupiedSeats: number;
   availableSeats: number;
   guestsWithoutTable: number;
+  /** Contagens derivadas da população elegível (mesma regra do modal). */
+  eligibleParticipants?: number;
+  participantsWithTable?: number;
+  participantsWithoutTable?: number;
+  /** Diagnóstico explícito — nunca removido automaticamente. */
+  orphanAssignments?: number;
+  duplicateAssignments?: number;
 }
 
 // ============================================================================

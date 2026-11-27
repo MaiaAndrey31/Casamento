@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
 	Armchair,
 	Plus,
@@ -24,7 +25,7 @@ import {
 	ToggleLeft,
 	ToggleRight,
 } from 'lucide-react';
-import type { TableWithOccupancy, TablesDashboardStats, SpecialParticipantCategory } from '@/types';
+import type { AvailableParticipant, TableWithOccupancy, TablesDashboardStats, SpecialParticipantCategory } from '@/types';
 import {
 	createTableAction,
 	updateTableAction,
@@ -58,16 +59,6 @@ type ModalMode = 'create' | 'edit' | null;
 interface TableFormData {
 	name: string;
 	capacity: string;
-}
-
-interface AvailableParticipant {
-	participantId: string;
-	participantName: string;
-	participantType: 'titular' | 'companion' | 'special';
-	invitationId: string;
-	participantSource?: 'rsvp' | 'special';
-	specialCategory?: SpecialParticipantCategory;
-	pendingReconciliation?: boolean;
 }
 
 interface SpecialParticipantItem {
@@ -114,6 +105,7 @@ interface InvitationGroup {
 // ============================================================================
 
 export function TablesManagerClient({ initialTables, initialStats }: Props) {
+	const router = useRouter();
 	const [tables, setTables] = useState(initialTables);
 	const [stats, setStats] = useState(initialStats);
 	const [loading, setLoading] = useState(false);
@@ -144,6 +136,12 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	// Delete confirmation
 	const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+	// Confirmação explícita de remoção de atribuição (distinta de excluir participante)
+	const [unassignConfirm, setUnassignConfirm] = useState<{
+		participantId: string;
+		participantName: string;
+	} | null>(null);
+
 	// Search filter for tables
 	const [tableSearch, setTableSearch] = useState('');
 
@@ -160,9 +158,11 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	const [loadingSpecial, setLoadingSpecial] = useState(false);
 	const [specialSectionOpen, setSpecialSectionOpen] = useState(false);
 
-	// Refs for focus management
+	// Refs for focus management and out-of-order async responses
 	const assignModalRef = useRef<HTMLDivElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
+	const participantsRequestRef = useRef(0);
+	const refreshRequestRef = useRef(0);
 
 	const showFeedback = useCallback((type: 'success' | 'error', message: string) => {
 		setFeedback({ type, message });
@@ -377,16 +377,19 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	// ---- ASSIGNMENT ----
 
 	const openAssignModal = async (tableId: string) => {
+		const requestId = ++participantsRequestRef.current;
 		setSelectedTableId(tableId);
 		setAssignModalOpen(true);
 		setSearchTerm('');
 		setSelectedParticipantIds(new Set());
 		setExpandedInvitationId(null);
 		setLoadError(null);
+		setTitularNames({});
 		setLoadingParticipants(true);
 
 		try {
 			const result = await listAvailableParticipantsAction({});
+			if (requestId !== participantsRequestRef.current) return; // resposta obsoleta
 			if (result.success && result.data) {
 				setAvailableParticipants(result.data);
 				if (result.data.length === 0) {
@@ -396,9 +399,13 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 				setLoadError(result.error || 'Erro ao carregar participantes disponíveis.');
 			}
 		} catch {
-			setLoadError('Erro ao carregar participantes disponíveis.');
+			if (requestId === participantsRequestRef.current) {
+				setLoadError('Erro ao carregar participantes disponíveis.');
+			}
 		} finally {
-			setLoadingParticipants(false);
+			if (requestId === participantsRequestRef.current) {
+				setLoadingParticipants(false);
+			}
 		}
 	};
 
@@ -415,13 +422,14 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 			if (e.key === 'Escape') {
 				if (assignModalOpen) setAssignModalOpen(false);
 				if (transferModalOpen) setTransferModalOpen(false);
+				if (unassignConfirm) setUnassignConfirm(null);
 				if (deleteConfirmId) setDeleteConfirmId(null);
 				if (modalMode) { setModalMode(null); setEditingTableId(null); }
 			}
 		};
 		window.addEventListener('keydown', handleKeyDown);
 		return () => window.removeEventListener('keydown', handleKeyDown);
-	}, [assignModalOpen, transferModalOpen, deleteConfirmId, modalMode]);
+	}, [assignModalOpen, transferModalOpen, unassignConfirm, deleteConfirmId, modalMode]);
 
 	// Estado para nomes dos titulares originais (buscados via server action)
 	const [titularNames, setTitularNames] = useState<Record<string, string>>({});
@@ -432,6 +440,8 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 
 		const groups = new Map<string, InvitationGroup>();
 		for (const p of availableParticipants) {
+			// Especiais não pertencem a convites RSVP e não têm invitationId real.
+			if (p.participantSource === 'special') continue;
 			if (!groups.has(p.invitationId)) {
 				groups.set(p.invitationId, { invitationId: p.invitationId, titular: null, companions: [] });
 			}
@@ -586,15 +596,21 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	};
 
 	const handleUnassign = async (participantId: string, participantName: string) => {
+		if (loading) return; // bloqueia cliques duplicados
+		setUnassignConfirm(null);
 		setLoading(true);
-		const result = await unassignParticipantAction({ participantId });
-		setLoading(false);
-
-		if (result.success) {
-			showFeedback('success', `${participantName} removido(a) da mesa.`);
+		try {
+			const result = await unassignParticipantAction({ participantId });
+			if (!result.success) {
+				showFeedback('error', result.error || 'Erro ao remover participante.');
+				return;
+			}
+			showFeedback('success', result.message || `${participantName} removido(a) da mesa.`);
 			await refreshData();
-		} else {
-			showFeedback('error', result.error || 'Erro ao remover participante.');
+		} catch {
+			showFeedback('error', 'Erro ao remover participante. Tente novamente.');
+		} finally {
+			setLoading(false);
 		}
 	};
 
@@ -605,7 +621,7 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	};
 
 	const handleTransfer = async (targetTableId: string) => {
-		if (!transferParticipantId) return;
+		if (!transferParticipantId || loading) return;
 
 		setLoading(true);
 		const result = await transferParticipantAction({
@@ -628,14 +644,34 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 	// ---- REFRESH ----
 
 	const refreshData = async () => {
+		const requestId = ++refreshRequestRef.current;
 		try {
-			const result = await refreshTablesDataAction();
-			if (result.success && result.data) {
-				setTables(result.data.tables as TableWithOccupancy[]);
-				setStats(result.data.stats as TablesDashboardStats);
+			const [tablesResult, participantsResult] = await Promise.all([
+				refreshTablesDataAction(),
+				listAvailableParticipantsAction({}),
+			]);
+			if (requestId !== refreshRequestRef.current) return; // resposta obsoleta
+
+			if (tablesResult.success && tablesResult.data) {
+				setTables(tablesResult.data.tables as TableWithOccupancy[]);
+				setStats(tablesResult.data.stats as TablesDashboardStats);
+			} else {
+				showFeedback('error', tablesResult.error || 'Não foi possível atualizar as mesas.');
+				return;
 			}
+			if (participantsResult.success && participantsResult.data) {
+				setAvailableParticipants(participantsResult.data);
+				if (assignModalOpen) {
+					setSelectedParticipantIds(prev =>
+						new Set([...prev].filter(id => participantsResult.data!.some(p => p.participantId === id))),
+					);
+				}
+			}
+			router.refresh();
 		} catch {
-			// Silent fail — data will refresh on next page load
+			if (requestId === refreshRequestRef.current) {
+				showFeedback('error', 'Não foi possível atualizar os dados do servidor.');
+			}
 		}
 	};
 
@@ -800,6 +836,20 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 				<StatCard label="Sem Mesa" value={stats.guestsWithoutTable} icon={AlertCircle} color="text-error" />
 			</div>
 
+			{/* Diagnóstico explícito — inconsistências nunca são removidas automaticamente */}
+			{((stats.orphanAssignments || 0) > 0 || (stats.duplicateAssignments || 0) > 0) && (
+				<div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-body-xs text-amber-900">
+					<AlertTriangle size={16} className="mt-0.5 shrink-0" />
+					<div>
+						<p className="font-semibold">Atribuições que precisam de revisão</p>
+						<p>
+							{stats.orphanAssignments || 0} órfã(s) e {stats.duplicateAssignments || 0} duplicada(s).
+							Os contadores acima consideram apenas participantes elegíveis; nenhum dado foi alterado automaticamente.
+						</p>
+					</div>
+				</div>
+			)}
+
 			{/* Table Search */}
 			<div className="relative">
 				<Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
@@ -837,7 +887,7 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 							onEdit={() => openEditModal(table)}
 							onDelete={() => setDeleteConfirmId(table.id)}
 							onAssign={() => openAssignModal(table.id)}
-							onUnassign={handleUnassign}
+							onUnassign={(id, name) => setUnassignConfirm({ participantId: id, participantName: name })}
 							onTransfer={openTransferModal}
 							allTables={tables}
 							isLoading={loading}
@@ -1250,6 +1300,43 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 							</ModalOverlay>
 						)}
 
+			{/* Confirmação de remoção de atribuição — NÃO exclui o participante */}
+			{unassignConfirm && (
+				<ModalOverlay onClose={() => setUnassignConfirm(null)}>
+					<div className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-5 shadow-2xl">
+						<div className="mb-4 flex items-center gap-2">
+							<UserMinus size={20} className="text-error" />
+							<h2 className="text-headline-sm font-bold text-primary">Remover da mesa</h2>
+						</div>
+						<p className="text-body-sm text-on-surface-variant">
+							Remover <strong>{unassignConfirm.participantName}</strong> da mesa? Ele(a) voltará para a
+							lista de participantes disponíveis.
+						</p>
+						<p className="mt-2 text-body-xs text-on-surface-variant/80">
+							Esta ação não exclui o participante, a confirmação de presença nem o identificador.
+						</p>
+						<div className="mt-5 flex justify-end gap-2">
+							<button
+								type="button"
+								onClick={() => setUnassignConfirm(null)}
+								className="rounded-lg border border-outline-variant/30 px-4 py-2 text-body-sm"
+							>
+								Cancelar
+							</button>
+							<button
+								type="button"
+								disabled={loading}
+								onClick={() => handleUnassign(unassignConfirm.participantId, unassignConfirm.participantName)}
+								className="inline-flex items-center gap-2 rounded-lg bg-error px-4 py-2 text-body-sm font-semibold text-white disabled:opacity-50"
+							>
+								{loading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+								Confirmar remoção
+							</button>
+						</div>
+					</div>
+				</ModalOverlay>
+			)}
+
 			{/* Transfer Modal */}
 			{transferModalOpen && (
 				<ModalOverlay onClose={() => { setTransferModalOpen(false); setTransferParticipantId(null); }}>
@@ -1257,32 +1344,38 @@ export function TablesManagerClient({ initialTables, initialStats }: Props) {
 						<div className="border-b border-outline-variant/10 p-4">
 							<h2 className="text-headline-sm font-bold text-primary">Transferir Participante</h2>
 							<p className="text-body-xs text-on-surface-variant">
-								Selecione a mesa destino para <strong>{transferParticipantName}</strong>.
+								<strong>{transferParticipantName}</strong> — mesa atual:{' '}
+								<strong>
+									{tables.find(t => t.assignments.some(a => a.participantId === transferParticipantId))?.name || 'Não encontrada'}
+								</strong>
 							</p>
 						</div>
 
 						<div className="flex-1 overflow-y-auto p-2">
 							<div className="space-y-1">
 								{tables
-									.filter(t => t.id !== tables.find(tbl =>
-										tbl.assignments.some(a => a.participantId === transferParticipantId),
-									)?.id)
-									.map(table => (
-										<button
-											key={table.id}
-											onClick={() => handleTransfer(table.id)}
-											disabled={loading || table.availableSeats <= 0}
-											className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-body-sm hover:bg-surface-container-low disabled:opacity-50"
-										>
-											<div>
-												<span className="font-medium text-on-surface">{table.name}</span>
-												<span className="ml-2 text-body-xs text-on-surface-variant">
-													{table.occupiedSeats}/{table.capacity}
-												</span>
-											</div>
-											<ArrowRightLeft size={16} className="text-primary" />
-										</button>
-									))}
+									.filter(t => !t.assignments.some(a => a.participantId === transferParticipantId))
+									.map(table => {
+										const isFull = table.availableSeats <= 0;
+										return (
+											<button
+												key={table.id}
+												type="button"
+												onClick={() => handleTransfer(table.id)}
+												disabled={loading || isFull}
+												aria-label={`Transferir para ${table.name}, ${table.availableSeats} vaga(s)`}
+												className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-body-sm hover:bg-surface-container-low disabled:opacity-50"
+											>
+												<div>
+													<span className="font-medium text-on-surface">{table.name}</span>
+													<span className="ml-2 text-body-xs text-on-surface-variant">
+														{table.occupiedSeats}/{table.capacity} · {isFull ? 'sem vagas' : `${table.availableSeats} vaga(s)`}
+													</span>
+												</div>
+												{loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRightLeft size={16} className="text-primary" />}
+											</button>
+										);
+									})}
 							</div>
 						</div>
 					</div>
@@ -1483,25 +1576,34 @@ function TableCard({ table, onEdit, onDelete, onAssign, onUnassign, onTransfer, 
 										{assignment.participantName}
 									</span>
 									<span className="shrink-0 rounded-full bg-surface-container-low px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-on-surface-variant">
-										{assignment.participantType === 'titular' ? 'C' : 'A'}
+										{assignment.participantType === 'titular'
+											? 'Titular'
+											: assignment.participantType === 'special'
+												? 'Especial'
+												: 'Acomp.'}
 									</span>
 								</div>
-								<div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+								{/* Ações sempre visíveis (inclusive em dispositivos touch) */}
+								<div className="flex shrink-0 gap-1">
 									<button
+										type="button"
 										onClick={() => onTransfer(assignment.participantId, assignment.participantName)}
 										disabled={isLoading || allTables.length <= 1}
-										className="rounded p-1 text-on-surface-variant hover:bg-surface hover:text-primary disabled:opacity-30"
-										title="Transferir"
+										aria-label={`Transferir ${assignment.participantName} para outra mesa`}
+										title="Transferir para outra mesa"
+										className="rounded p-1.5 text-on-surface-variant hover:bg-surface hover:text-primary disabled:opacity-30"
 									>
-										<ArrowRightLeft size={12} />
+										<ArrowRightLeft size={14} />
 									</button>
 									<button
+										type="button"
 										onClick={() => onUnassign(assignment.participantId, assignment.participantName)}
 										disabled={isLoading}
-										className="rounded p-1 text-on-surface-variant hover:bg-error-container/20 hover:text-error disabled:opacity-30"
-										title="Remover"
+										aria-label={`Remover ${assignment.participantName} da mesa`}
+										title="Remover da mesa (não exclui o participante)"
+										className="rounded p-1.5 text-on-surface-variant hover:bg-error-container/20 hover:text-error disabled:opacity-30"
 									>
-										<X size={12} />
+										<UserMinus size={14} />
 									</button>
 								</div>
 							</div>

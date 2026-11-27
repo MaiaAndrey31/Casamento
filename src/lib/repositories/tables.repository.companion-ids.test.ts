@@ -64,6 +64,7 @@ function setupFirestoreMock(fixture: TestFixture) {
 								}
 								if (sub === 'invitations') {
 									return {
+										get: async () => makeSnap(fixture.invitations),
 										where: () => ({
 											get: async () => makeSnap(fixture.invitations),
 										}),
@@ -78,6 +79,7 @@ function setupFirestoreMock(fixture: TestFixture) {
 								}
 								if (sub === 'rsvps') {
 									return {
+										get: async () => makeSnap(fixture.rsvps),
 										where: () => ({
 											get: async () => makeSnap(fixture.rsvps),
 										}),
@@ -85,6 +87,9 @@ function setupFirestoreMock(fixture: TestFixture) {
 								}
 								if (sub === 'guests') {
 									return {
+										get: async () => makeSnap(
+											[...fixture.guests.entries()].map(([id, g]) => ({ id, data: { fullName: g.fullName, active: g.active, invitationId: '' } })),
+										),
 										doc: (guestId: string) => makeDocRef(guestId),
 									};
 								}

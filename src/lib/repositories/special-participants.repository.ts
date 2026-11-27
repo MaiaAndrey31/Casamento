@@ -5,7 +5,7 @@
  * Coleção: events/{eventId}/specialParticipants/{participantId}
  */
 
-import type { SpecialParticipant, SpecialParticipantCategory } from '@/types';
+import type { AvailableParticipant, SpecialParticipant, SpecialParticipantCategory } from '@/types';
 import { serializeFirestoreValue } from '@/lib/server/firestore-serializer';
 
 const SUBCOLLECTION = 'specialParticipants';
@@ -270,85 +270,18 @@ export async function deleteSpecialParticipant(
 // ============================================================================
 
 /**
- * Lista participantes especiais ativos disponíveis para atribuição (não atribuídos).
- * Retorna array compatível com listAvailableParticipants do tables.repository.
+ * Lista participantes especiais ativos disponíveis para atribuição.
+ *
+ * Delega ao diretório central: a antiga query com where(active) + orderBy(fullName)
+ * exigia índice composto inexistente em produção e falhava silenciosamente.
  */
 export async function listAvailableSpecialParticipants(
 	eventId: string,
 	searchTerm?: string,
-): Promise<Array<{
-	participantId: string;
-	participantName: string;
-	participantType: 'special';
-	participantSource: 'special';
-	specialCategory: SpecialParticipantCategory;
-	invitationId: string; // Placeholder para compatibilidade de tipo
-	rsvpStatus: string;
-	alreadyAssigned?: boolean;
-}>> {
-	try {
-		const { adminDb } = await import('@/lib/firebase/admin');
-
-		// Buscar todas as atribuições existentes
-		const allAssignmentsSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection('tableAssignments')
-			.get();
-
-		const assignedParticipantIds = new Set<string>();
-		allAssignmentsSnap.docs.forEach(doc => {
-			assignedParticipantIds.add(doc.data()?.participantId);
-		});
-
-		// Buscar participantes especiais ativos
-		const specialSnap = await adminDb
-			.collection('events')
-			.doc(eventId)
-			.collection(SUBCOLLECTION)
-			.where('active', '==', true)
-			.orderBy('fullName', 'asc')
-			.get();
-
-		const normalizedSearch = searchTerm ? normalizeSearch(searchTerm) : '';
-		const available: Array<{
-			participantId: string;
-			participantName: string;
-			participantType: 'special';
-			participantSource: 'special';
-			specialCategory: SpecialParticipantCategory;
-			invitationId: string;
-			rsvpStatus: string;
-			alreadyAssigned?: boolean;
-		}> = [];
-
-		for (const doc of specialSnap.docs) {
-			// Filtrar participantes especiais já atribuídos — apenas disponíveis aparecem
-			if (assignedParticipantIds.has(doc.id)) continue;
-
-			const data = doc.data();
-			const fullName = data?.fullName || '';
-
-			if (normalizedSearch && !normalizeSearch(fullName).includes(normalizedSearch)) continue;
-
-			available.push({
-				participantId: doc.id,
-				participantName: fullName,
-				participantType: 'special',
-				participantSource: 'special',
-				specialCategory: data?.category || 'other',
-				invitationId: `__special_${doc.id}`, // Placeholder único para compatibilidade
-				rsvpStatus: 'special',
-			});
-		}
-
-		return available;
-	} catch (e) {
-		console.error('[SpecialParticipantsRepository] Falha ao listar disponíveis:', e);
-		return [];
-	}
+): Promise<AvailableParticipant[]> {
+	const { listAvailableSpecialParticipants: resolve } = await import('@/lib/tables/participant-directory');
+	return resolve(eventId, searchTerm);
 }
-
 /**
  * Conta participantes especiais ativos.
  */

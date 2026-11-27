@@ -28,6 +28,10 @@ function readRepo(name: string): string {
 	return fs.readFileSync(path.join(REPOS_DIR, name), 'utf-8');
 }
 
+function readDirectory(): string {
+	return fs.readFileSync(path.join(process.cwd(), 'src/lib/tables/participant-directory.ts'), 'utf-8');
+}
+
 describe('Organização de Mesas — Regras de Negócio', () => {
 	describe('Cenário 1: Criar mesa', () => {
 		it('deve validar nome e capacidade via Zod no server action', () => {
@@ -177,8 +181,14 @@ describe('Organização de Mesas — Regras de Negócio', () => {
 			// O repositório pode LER rsvps para listar participantes disponíveis (read-only),
 			// mas não deve conter operações de escrita (set/update/delete) em rsvps
 			const repoCode = readRepo('tables.repository.ts');
-			expect(repoCode).not.toMatch(/rsvps[\s\S]*?transaction\.(set|update|delete)/);
-			expect(repoCode).not.toMatch(/rsvpRef[\s\S]*?\.(set|update|delete)\(/);
+			// Leitura de rsvps é permitida; escrita não. Busca limitada à mesma
+			// instrução para não gerar falso positivo com escritas em tableAssignments.
+			expect(repoCode).not.toMatch(/collection\('rsvps'\)[\s\S]{0,200}?\.(set|update|delete)\(/);
+			expect(repoCode).not.toMatch(/rsvpRef[\s\S]{0,200}?\.(set|update|delete)\(/);
+			const directory = readDirectory();
+			expect(directory).not.toMatch(/transaction\.(set|update|delete)\(/);
+			expect(directory).not.toMatch(/\.ref\.(set|update|delete)\(/);
+			expect(directory).not.toMatch(/adminDb[^;]{0,120}\.(set|update|delete)\(/);
 		});
 
 		it('não deve modificar check-ins em nenhuma operação de mesa', () => {
@@ -499,17 +509,22 @@ describe('Participantes Especiais — Exclusão Definitiva e Concorrência', () 
 	});
 
 	describe('Cenário SP-8: Contadores incluem participantes especiais', () => {
-		it('getTablesDashboardStats deve somar especiais ativos ao total elegível', () => {
+		it('getTablesDashboardStats deve derivar contagens da fonte única que inclui especiais ativos', () => {
 			const code = readTablesRepo();
-			expect(code).toContain("collection('specialParticipants')");
-			expect(code).toContain('activeSpecialCount');
-			expect(code).toContain('totalEligibleParticipants');
+			const directory = readDirectory();
+			expect(code).toContain('getParticipantCounts');
+			expect(directory).toContain("readCollection(eventId, SPECIALS)");
+			expect(directory).toContain('special.data.active !== true');
+			expect(directory).toContain('participantsWithoutTable');
 		});
 
-		it('listAvailableParticipants deve unir RSVP e especiais', () => {
+		it('listAvailableParticipants deve resolver RSVP e especiais no diretório central', () => {
 			const code = readTablesRepo();
-			expect(code).toContain('listAvailableSpecialParticipants');
-			expect(code).toContain('combined');
+			const directory = readDirectory();
+			expect(code).toContain('@/lib/tables/participant-directory');
+			expect(directory).toContain("participantSource: 'rsvp'");
+			expect(directory).toContain("participantSource: 'special'");
+			expect(directory).toContain('diagnostics.assignedIds.has');
 		});
 	});
 
